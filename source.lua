@@ -1,626 +1,960 @@
 --[[
-    Zenith UI
-    A modern, fully animated UI library for Roblox executors
-    Style: Vape V4 / Meteor Client inspired
-    Features: Windows, Tabs, Buttons, Checkboxes, Sliders, Dropdowns, TextInputs, Keybinds, ColorPickers, Notifications, Tooltips, Resizing, Scrolling
-    Dependencies: Drawing API, TweenService (standard in most executors)
---]]
+    ███████╗███████╗███╗   ██╗██╗████████╗██╗  ██╗
+    ╚══███╔╝██╔════╝████╗  ██║██║╚══██╔══╝██║  ██║
+      ███╔╝ █████╗  ██╔██╗ ██║██║   ██║   ███████║
+     ███╔╝  ██╔══╝  ██║╚██╗██║██║   ██║   ██╔══██║
+    ███████╗███████╗██║ ╚████║██║   ██║   ██║  ██║
+    ╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+    
+    Zenith UI v2.0 – Cyberpunk UI Library
+    inspired by Rayfield.
+    Made by Xen / GHP.
+]]
 
 local Zenith = {}
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
+Zenith.__version = "2.0.0"
+
+-- Services
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
--- ========================= THEME =========================
-Zenith.Theme = {
-    Background    = Color3.fromRGB(18, 18, 24),  -- main background
-    Surface       = Color3.fromRGB(28, 28, 36),  -- window background
-    Element       = Color3.fromRGB(38, 38, 48),  -- input background
-    Accent        = Color3.fromRGB(0, 200, 200), -- cyan accent
-    AccentDark    = Color3.fromRGB(0, 150, 150),
-    Text          = Color3.fromRGB(240, 240, 245),
-    TextDim       = Color3.fromRGB(160, 160, 180),
-    Border        = Color3.fromRGB(45, 45, 55),
-    Shadow        = Color3.fromRGB(0, 0, 0),
-    ShadowAlpha   = 0.35,
-    Success       = Color3.fromRGB(80, 200, 120),
-    Error         = Color3.fromRGB(220, 60, 60),
+-- Default colors (cyberpunk theme)
+local DefaultTheme = {
+    Background = Color3.fromRGB(10, 10, 20),
+    Surface = Color3.fromRGB(20, 20, 35),
+    SurfaceLight = Color3.fromRGB(30, 30, 50),
+    Primary = Color3.fromRGB(0, 255, 255),      -- neon cyan
+    Secondary = Color3.fromRGB(255, 0, 255),    -- neon magenta
+    Accent = Color3.fromRGB(255, 200, 0),       -- gold
+    Danger = Color3.fromRGB(255, 50, 50),
+    Success = Color3.fromRGB(50, 255, 50),
+    Text = Color3.fromRGB(240, 240, 255),
+    TextDim = Color3.fromRGB(160, 160, 200),
+    Border = Color3.fromRGB(0, 255, 255),
 }
 
-Zenith.Font = Drawing.Fonts.UI
-Zenith.FontSize = 14
-Zenith.AnimationSpeed = 0.2
-Zenith.Notifications = {}
-Zenith.Tooltip = nil
-Zenith.TooltipTimer = 0
+-- Theme storage (can be overridden)
+Zenith.Theme = {}
+for k,v in pairs(DefaultTheme) do Zenith.Theme[k] = v end
 
--- ========================= UTILITIES =========================
-local function createSquare(color, pos, size, filled, thickness)
-    local sq = Drawing.new("Square")
-    sq.Color = color
-    sq.Position = pos
-    sq.Size = size
-    sq.Filled = filled ~= false
-    sq.Thickness = thickness or 0
-    return sq
+-- Utility functions
+local function addGlow(instance, color, thickness, transparency)
+    local stroke = Instance.new("UIStroke")
+    stroke.Parent = instance
+    stroke.Color = color or Zenith.Theme.Primary
+    stroke.Thickness = thickness or 1.5
+    stroke.Transparency = transparency or 0.3
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    return stroke
 end
 
-local function createText(text, color, pos, size, font)
-    local txt = Drawing.new("Text")
-    txt.Text = text
-    txt.Color = color
-    txt.Position = pos
-    txt.Size = size or Zenith.FontSize
-    txt.Font = font or Zenith.Font
-    txt.Center = false
-    txt.Outline = false
-    return txt
+local function tween(obj, props, duration, style, direction)
+    style = style or Enum.EasingStyle.Quad
+    direction = direction or Enum.EasingDirection.Out
+    local t = TweenService:Create(obj, TweenInfo.new(duration, style, direction), props)
+    t:Play()
+    return t
 end
 
-local function drawShadow(x, y, w, h, alpha)
-    for i = 1, 4 do
-        local shadow = createSquare(Zenith.Theme.Shadow, Vector2.new(x - i*2, y - i), Vector2.new(w + i*4, h + i*2), true)
-        shadow.Transparency = (alpha or Zenith.Theme.ShadowAlpha) * (1 - i/5)
-        shadow:Draw()
-        shadow:Remove()
+local function createCorner(obj, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 8)
+    corner.Parent = obj
+    return corner
+end
+
+-- Notification queue
+local notificationQueue = {}
+local activeNotif = nil
+
+local function showNextNotification()
+    if activeNotif then return end
+    if #notificationQueue == 0 then return end
+    local notif = table.remove(notificationQueue, 1)
+    
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ZenithNotif"
+    gui.Parent = CoreGui
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local frame = Instance.new("Frame")
+    frame.Parent = gui
+    frame.BackgroundColor3 = Zenith.Theme.Surface
+    frame.BorderSizePixel = 0
+    frame.Size = UDim2.new(0, 320, 0, 70)
+    frame.Position = UDim2.new(1, -340, 0, 20)
+    frame.AnchorPoint = Vector2.new(1, 0)
+    createCorner(frame, 8)
+    addGlow(frame, notif.Type == "error" and Zenith.Theme.Danger or Zenith.Theme.Primary, 1.5, 0.4)
+    
+    local title = Instance.new("TextLabel")
+    title.Parent = frame
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0, 12, 0, 8)
+    title.Size = UDim2.new(1, -24, 0, 20)
+    title.Font = Enum.Font.GothamBold
+    title.Text = notif.Title or "Notification"
+    title.TextColor3 = notif.Type == "error" and Zenith.Theme.Danger or Zenith.Theme.Primary
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local content = Instance.new("TextLabel")
+    content.Parent = frame
+    content.BackgroundTransparency = 1
+    content.Position = UDim2.new(0, 12, 0, 32)
+    content.Size = UDim2.new(1, -24, 0, 30)
+    content.Font = Enum.Font.Gotham
+    content.Text = notif.Content or ""
+    content.TextColor3 = Zenith.Theme.Text
+    content.TextSize = 12
+    content.TextWrapped = true
+    content.TextXAlignment = Enum.TextXAlignment.Left
+    
+    activeNotif = gui
+    tween(frame, {Position = UDim2.new(1, -340, 0, 20)}, 0.35, Enum.EasingStyle.Back)
+    
+    task.wait(notif.Duration or 3)
+    tween(frame, {Position = UDim2.new(1, 0, 0, 20)}, 0.3, Enum.EasingStyle.Back):OnComplete(function()
+        gui:Destroy()
+        activeNotif = nil
+        showNextNotification()
+    end)
+end
+
+function Zenith:Notify(options)
+    table.insert(notificationQueue, options)
+    showNextNotification()
+end
+
+-- Loading screen
+local loadingGui = nil
+function Zenith:ShowLoading(message)
+    if loadingGui then loadingGui:Destroy() end
+    loadingGui = Instance.new("ScreenGui")
+    loadingGui.Name = "ZenithLoading"
+    loadingGui.Parent = CoreGui
+    
+    local bg = Instance.new("Frame")
+    bg.Parent = loadingGui
+    bg.BackgroundColor3 = Zenith.Theme.Background
+    bg.BackgroundTransparency = 0.5
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    
+    local frame = Instance.new("Frame")
+    frame.Parent = loadingGui
+    frame.BackgroundColor3 = Zenith.Theme.Surface
+    frame.Size = UDim2.new(0, 300, 0, 100)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -50)
+    frame.AnchorPoint = Vector2.new(0, 0)
+    createCorner(frame, 12)
+    addGlow(frame, Zenith.Theme.Primary, 2)
+    
+    local text = Instance.new("TextLabel")
+    text.Parent = frame
+    text.BackgroundTransparency = 1
+    text.Size = UDim2.new(1, 0, 0, 30)
+    text.Position = UDim2.new(0, 0, 0.5, -15)
+    text.Font = Enum.Font.GothamBold
+    text.Text = message or "Loading..."
+    text.TextColor3 = Zenith.Theme.Text
+    text.TextSize = 18
+    
+    local spinner = Instance.new("Frame")
+    spinner.Parent = frame
+    spinner.BackgroundColor3 = Zenith.Theme.Primary
+    spinner.Size = UDim2.new(0, 20, 0, 20)
+    spinner.Position = UDim2.new(0.5, -10, 0, 65)
+    createCorner(spinner, 10)
+    
+    task.spawn(function()
+        while loadingGui do
+            spinner.Rotation = (spinner.Rotation + 5) % 360
+            task.wait(0.02)
+        end
+    end)
+end
+
+function Zenith:HideLoading()
+    if loadingGui then loadingGui:Destroy(); loadingGui = nil end
+end
+
+-- Keybind manager
+local keybinds = {}
+function Zenith:RegisterKeybind(key, callback)
+    keybinds[key] = callback
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode ~= Enum.KeyCode.Unknown then
+        local key = input.KeyCode.Name
+        if keybinds[key] then
+            keybinds[key]()
+        end
     end
+end)
+
+-- Draggable module
+local function makeDraggable(frame, handle)
+    handle = handle or frame
+    local dragging = false
+    local dragStart, startPos
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
 end
 
-local function tweenObject(obj, prop, target, duration, style, direction)
-    local info = TweenInfo.new(duration or Zenith.AnimationSpeed, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out)
-    local tween = TweenService:Create(obj, info, {[prop] = target})
-    tween:Play()
-    return tween
+-- Resizable module (optional)
+local function makeResizable(frame, minSize, maxSize)
+    local resizeHandle = Instance.new("Frame")
+    resizeHandle.Parent = frame
+    resizeHandle.BackgroundColor3 = Zenith.Theme.Primary
+    resizeHandle.Size = UDim2.new(0, 10, 0, 10)
+    resizeHandle.Position = UDim2.new(1, -10, 1, -10)
+    resizeHandle.AnchorPoint = Vector2.new(1, 1)
+    resizeHandle.BackgroundTransparency = 0.7
+    createCorner(resizeHandle, 5)
+    
+    local resizing = false
+    local startMouse, startSize
+    resizeHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            resizing = true
+            startMouse = input.Position
+            startSize = frame.AbsoluteSize
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then resizing = false end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - startMouse
+            local newWidth = math.clamp(startSize.X + delta.X, minSize.X.Offset, maxSize.X.Offset)
+            local newHeight = math.clamp(startSize.Y + delta.Y, minSize.Y.Offset, maxSize.Y.Offset)
+            frame.Size = UDim2.new(0, newWidth, 0, newHeight)
+        end
+    end)
 end
 
-local function clamp(v, min, max) return math.min(max, math.max(min, v)) end
-
--- ========================= WINDOW MANAGER =========================
-Zenith.Windows = {}
-Zenith.ActiveWindow = nil
-Zenith.DragOffset = Vector2.new()
-Zenith.ResizeEdge = nil
-Zenith.HoveredElement = nil
-
--- ========================= WINDOW CLASS =========================
+-- Window class
 local Window = {}
 Window.__index = Window
 
-function Zenith:CreateWindow(title, x, y, w, h)
-    local newWindow = setmetatable({
-        Title = title,
-        X = x, Y = y, Width = w, Height = h,
-        MinWidth = 300, MinHeight = 200,
-        Visible = true,
-        Dragging = false,
-        Resizing = false,
-        Tabs = {},
-        ActiveTab = nil,
-        ScrollOffset = 0,
-        Closable = true,
-        Resizable = true,
-        TabHeight = 28,
-        TitleHeight = 30,
-        Elements = {}, -- flattened for layout
-    }, Window)
-    table.insert(Zenith.Windows, newWindow)
-    return newWindow
-end
-
-function Window:AddTab(name)
-    local tab = { Name = name, Elements = {} }
-    table.insert(self.Tabs, tab)
-    if not self.ActiveTab then self.ActiveTab = tab end
-    self:RefreshLayout()
-    return tab
-end
-
-function Window:AddElement(tab, element)
-    element.Window = self
-    element.Tab = tab
-    element.Hover = false
-    element.AnimProgress = 0
-    element.AnimValue = 0
-    table.insert(tab.Elements, element)
-    self:RefreshLayout()
-    return element
-end
-
-function Window:RefreshLayout()
-    if not self.ActiveTab then return end
-    local y = self.Y + self.TitleHeight + self.TabHeight + 8
-    local padding = 8
-    local contentX = self.X + padding
-    local contentW = self.Width - padding * 2
-    self.Elements = {}
-    for _, elem in ipairs(self.ActiveTab.Elements) do
-        elem.X = contentX
-        elem.Y = y - self.ScrollOffset
-        elem.Width = contentW
-        elem.Height = 32
-        if elem.Type == "Dropdown" and elem.Expanded then
-            elem.Height = 32 + (#elem.Options * 28) * elem.AnimHeight
-        elseif elem.Type == "ColorPicker" and elem.Open then
-            elem.Height = 180
-        elseif elem.Type == "Slider" then
-            elem.Height = 38
-        elseif elem.Type == "TextInput" then
-            elem.Height = 42
-        elseif elem.Type == "Keybind" then
-            elem.Height = 38
-        end
-        table.insert(self.Elements, elem)
-        y = y + elem.Height + 6
-    end
-    self.ContentHeight = y - self.Y - self.TitleHeight - self.TabHeight
-end
-
--- ========================= ELEMENT TYPES =========================
-local ElementTypes = {}
-
-function ElementTypes.Button(label, callback)
-    return {
-        Type = "Button",
-        Label = label,
-        Callback = callback,
-    }
-end
-
-function ElementTypes.Checkbox(label, initial, callback)
-    return {
-        Type = "Checkbox",
-        Label = label,
-        Value = initial or false,
-        Callback = callback,
-        AnimValue = initial and 1 or 0,
-    }
-end
-
-function ElementTypes.Slider(label, min, max, initial, callback, decimals)
-    return {
-        Type = "Slider",
-        Label = label,
-        Min = min or 0,
-        Max = max or 100,
-        Value = initial or 0,
-        Decimals = decimals or 0,
-        Callback = callback,
-        Dragging = false,
-        AnimValue = (initial - min)/(max - min) or 0,
-    }
-end
-
-function ElementTypes.Dropdown(label, options, selected, callback)
-    return {
-        Type = "Dropdown",
-        Label = label,
-        Options = options,
-        Selected = selected or 1,
-        Callback = callback,
-        Expanded = false,
-        AnimHeight = 0,
-    }
-end
-
-function ElementTypes.TextInput(label, placeholder, callback)
-    return {
-        Type = "TextInput",
-        Label = label,
-        Placeholder = placeholder or "",
-        Value = "",
-        Callback = callback,
-        Focused = false,
-    }
-end
-
-function ElementTypes.Keybind(label, initialKey, callback)
-    return {
-        Type = "Keybind",
-        Label = label,
-        Key = initialKey or "None",
-        Callback = callback,
-        Waiting = false,
-    }
-end
-
-function ElementTypes.ColorPicker(label, initialColor, callback)
-    return {
-        Type = "ColorPicker",
-        Label = label,
-        Color = initialColor or Zenith.Theme.Accent,
-        Callback = callback,
-        Hue = 0, Sat = 1, Val = 1,
-        Open = false,
-    }
-end
-
--- ========================= DRAWING FUNCTIONS =========================
-local function drawRoundedRect(x, y, w, h, radius, color, transparency)
-    local sq = createSquare(color, Vector2.new(x, y), Vector2.new(w, h), true)
-    sq.Transparency = transparency or 0
-    sq:Draw()
-    sq:Remove()
-    -- simple corner circles for roundness
-    local circle = Drawing.new("Circle")
-    circle.Filled = true
-    circle.Color = color
-    circle.Transparency = transparency or 0
-    circle.Radius = radius
-    circle.Position = Vector2.new(x + radius, y + radius)
-    circle:Draw()
-    circle.Position = Vector2.new(x + w - radius, y + radius)
-    circle:Draw()
-    circle.Position = Vector2.new(x + radius, y + h - radius)
-    circle:Draw()
-    circle.Position = Vector2.new(x + w - radius, y + h - radius)
-    circle:Draw()
-    circle:Remove()
-end
-
-local function drawButton(elem, dt)
-    local target = elem.Hover and 1 or 0
-    elem.AnimProgress = elem.AnimProgress + (target - elem.AnimProgress) * dt * 12
-    local color = Zenith.Theme.Accent:Lerp(Zenith.Theme.AccentDark, elem.AnimProgress)
-    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, color)
-    local text = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 12, elem.Y + elem.Height/2 - 8))
-    text:Draw()
-    text:Remove()
-end
-
-local function drawCheckbox(elem, dt)
-    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, Zenith.Theme.Element)
-    local box = createSquare(Zenith.Theme.Accent, Vector2.new(elem.X + 8, elem.Y + 6), Vector2.new(20, 20), true)
-    box:Draw()
-    box:Remove()
-    local target = elem.Value and 1 or 0
-    elem.AnimValue = elem.AnimValue + (target - elem.AnimValue) * dt * 15
-    if elem.AnimValue > 0.05 then
-        local check = createText("✔", Zenith.Theme.Text, Vector2.new(elem.X + 12, elem.Y + 4), 16)
-        check.Transparency = elem.AnimValue
-        check:Draw()
-        check:Remove()
-    end
-    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 36, elem.Y + elem.Height/2 - 8))
-    label:Draw()
-    label:Remove()
-end
-
-local function drawSlider(elem, dt)
-    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, Zenith.Theme.Element)
-    local label = createText(elem.Label .. ": " .. string.format("%."..(elem.Decimals or 0).."f", elem.Value), Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 6))
-    label:Draw()
-    label:Remove()
-    local barX = elem.X + elem.Width - 120
-    local barW = 100
-    drawRoundedRect(barX, elem.Y + elem.Height - 12, barW, 6, 3, Zenith.Theme.Background)
-    local target = (elem.Value - elem.Min) / (elem.Max - elem.Min)
-    elem.AnimValue = elem.AnimValue + (target - elem.AnimValue) * dt * 12
-    drawRoundedRect(barX, elem.Y + elem.Height - 12, barW * elem.AnimValue, 6, 3, Zenith.Theme.Accent)
-end
-
-local function drawDropdown(elem, dt)
-    local bgColor = elem.Expanded and Zenith.Theme.Accent or Zenith.Theme.Element
-    drawRoundedRect(elem.X, elem.Y, elem.Width, 32, 6, bgColor)
-    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 8))
-    label:Draw()
-    label:Remove()
-    local current = elem.Options[elem.Selected] or ""
-    local valueText = createText(current, Zenith.Theme.TextDim, Vector2.new(elem.X + elem.Width - 80, elem.Y + 8))
-    valueText:Draw()
-    valueText:Remove()
-    local arrow = createText(elem.Expanded and "▲" or "▼", Zenith.Theme.Text, Vector2.new(elem.X + elem.Width - 20, elem.Y + 6), 12)
-    arrow:Draw()
-    arrow:Remove()
-    if elem.Expanded then
-        local optY = elem.Y + 32
-        for i, opt in ipairs(elem.Options) do
-            drawRoundedRect(elem.X, optY, elem.Width, 28, 4, Zenith.Theme.Surface)
-            local optColor = (i == elem.Selected) and Zenith.Theme.Accent or Zenith.Theme.Text
-            local optText = createText(opt, optColor, Vector2.new(elem.X + 12, optY + 6))
-            optText:Draw()
-            optText:Remove()
-            optY = optY + 28
-        end
-    end
-    local targetHeight = elem.Expanded and 1 or 0
-    elem.AnimHeight = elem.AnimHeight + (targetHeight - elem.AnimHeight) * dt * 10
-end
-
-local function drawTextInput(elem, dt)
-    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, elem.Focused and Zenith.Theme.Accent or Zenith.Theme.Element)
-    local label = createText(elem.Label, Zenith.Theme.TextDim, Vector2.new(elem.X + 8, elem.Y + 4), 11)
-    label:Draw()
-    label:Remove()
-    local displayText = (elem.Value == "" and elem.Placeholder) or elem.Value
-    local textColor = (elem.Value == "" and elem.Placeholder ~= "") and Zenith.Theme.TextDim or Zenith.Theme.Text
-    local inputText = createText(displayText, textColor, Vector2.new(elem.X + 8, elem.Y + 20), 13)
-    inputText:Draw()
-    inputText:Remove()
-    if elem.Focused then
-        local cursor = createText("|", Zenith.Theme.Accent, Vector2.new(elem.X + 8 + (#displayText * 6), elem.Y + 18), 14)
-        cursor:Draw()
-        cursor:Remove()
-    end
-end
-
-local function drawKeybind(elem, dt)
-    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, elem.Waiting and Zenith.Theme.Accent or Zenith.Theme.Element)
-    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 6))
-    label:Draw()
-    label:Remove()
-    local keyText = elem.Waiting and "Press any key..." or tostring(elem.Key)
-    local keyColor = elem.Waiting and Zenith.Theme.Accent or Zenith.Theme.TextDim
-    local keyLabel = createText(keyText, keyColor, Vector2.new(elem.X + elem.Width - 100, elem.Y + 8))
-    keyLabel:Draw()
-    keyLabel:Remove()
-end
-
-local function drawColorPicker(elem, dt)
-    drawRoundedRect(elem.X, elem.Y, elem.Width, 32, 6, Zenith.Theme.Element)
-    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 8))
-    label:Draw()
-    label:Remove()
-    local preview = createSquare(elem.Color, Vector2.new(elem.X + elem.Width - 30, elem.Y + 6), Vector2.new(20, 20), true)
-    preview:Draw()
-    preview:Remove()
-    if elem.Open then
-        drawRoundedRect(elem.X, elem.Y + 32, elem.Width, 148, 6, Zenith.Theme.Surface)
-        -- simplified color wheel representation (just a gradient bar for hue)
-        for i = 0, elem.Width - 20 do
-            local hue = i / (elem.Width - 20)
-            local color = Color3.fromHSV(hue, 1, 1)
-            local bar = createSquare(color, Vector2.new(elem.X + 10 + i, elem.Y + 40), Vector2.new(1, 12), true)
-            bar:Draw()
-            bar:Remove()
-        end
-        local indicator = createSquare(Color3.fromRGB(255,255,255), Vector2.new(elem.X + 10 + (elem.Hue * (elem.Width - 20)), elem.Y + 38), Vector2.new(2, 16), true)
-        indicator:Draw()
-        indicator:Remove()
-    end
-end
-
--- ========================= NOTIFICATIONS =========================
-function Zenith:Notify(title, message, duration, type)
-    local notif = {
-        Title = title,
-        Message = message,
-        Duration = duration or 3,
-        Type = type or "info",
-        StartTime = tick(),
-        Y = 50,
-        AnimY = -100,
-    }
-    table.insert(self.Notifications, notif)
-    tweenObject(notif, "AnimY", 50, 0.3, Enum.EasingStyle.Bounce)
-end
-
-local function drawNotifications()
-    local y = 50
-    for i, n in ipairs(Zenith.Notifications) do
-        local alpha = 1 - (tick() - n.StartTime) / n.Duration
-        if alpha <= 0 then table.remove(Zenith.Notifications, i) break end
-        local bgColor = (n.Type == "error") and Zenith.Theme.Error or (n.Type == "success") and Zenith.Theme.Success or Zenith.Theme.Accent
-        local yPos = n.Y + (n.AnimY - n.Y) * (1 - alpha) -- smooth slide
-        drawRoundedRect(10, yPos, 260, 50, 8, bgColor, 1 - alpha)
-        local title = createText(n.Title, Zenith.Theme.Text, Vector2.new(20, yPos + 6), 12)
-        title.Transparency = 1 - alpha
-        title:Draw()
-        title:Remove()
-        local msg = createText(n.Message, Zenith.Theme.TextDim, Vector2.new(20, yPos + 24), 11)
-        msg.Transparency = 1 - alpha
-        msg:Draw()
-        msg:Remove()
-        y = y + 60
-    end
-end
-
--- ========================= TOOLTIP =========================
-function Zenith:ShowTooltip(text, x, y)
-    if self.Tooltip then self.Tooltip:Remove() end
-    self.Tooltip = createText(text, Zenith.Theme.Text, Vector2.new(x + 10, y + 10), 12)
-    self.Tooltip.Outline = true
-    self.Tooltip.OutlineColor = Color3.fromRGB(0,0,0)
-    self.TooltipTimer = tick()
-end
-
--- ========================= INPUT HANDLING =========================
-function Zenith:Update(dt)
-    local mx, my = UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y
-    local clicked = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-    local anyHover = false
-    self.HoveredElement = nil
-
-    -- Update windows
-    for _, win in ipairs(self.Windows) do
-        if win.Visible then
-            win:RefreshLayout()
-            -- Title bar drag
-            local inTitle = mx > win.X and mx < win.X + win.Width and my > win.Y and my < win.Y + win.TitleHeight
-            if inTitle and clicked and not win.Dragging then
-                win.Dragging = true
-                self.ActiveWindow = win
-                self.DragOffset = Vector2.new(mx - win.X, my - win.Y)
-            end
-            if win.Dragging and not clicked then win.Dragging = false end
-            if win.Dragging then
-                win.X = mx - self.DragOffset.X
-                win.Y = my - self.DragOffset.Y
-            end
-            -- Resize edges (bottom-right)
-            if win.Resizable then
-                local inResize = mx > win.X + win.Width - 10 and my > win.Y + win.Height - 10
-                if inResize and clicked and not win.Resizing then
-                    win.Resizing = true
-                end
-                if win.Resizing and not clicked then win.Resizing = false end
-                if win.Resizing then
-                    win.Width = math.max(win.MinWidth, mx - win.X)
-                    win.Height = math.max(win.MinHeight, my - win.Y)
-                end
-            end
-            -- Tabs
-            local tabX = win.X + 10
-            for i, tab in ipairs(win.Tabs) do
-                if mx > tabX and mx < tabX + 80 and my > win.Y + win.TitleHeight and my < win.Y + win.TitleHeight + win.TabHeight then
-                    anyHover = true
-                    if clicked then
-                        win.ActiveTab = tab
-                        win.ScrollOffset = 0
-                        win:RefreshLayout()
-                    end
-                end
-                tabX = tabX + 85
-            end
-            -- Elements
-            for _, elem in ipairs(win.Elements) do
-                if mx > elem.X and mx < elem.X + elem.Width and my > elem.Y and my < elem.Y + elem.Height then
-                    anyHover = true
-                    self.HoveredElement = elem
-                    elem.Hover = true
-                    if clicked then
-                        if elem.Type == "Button" then
-                            elem.Callback()
-                            tweenObject(elem, "AnimProgress", 0.2, 0.1)
-                        elseif elem.Type == "Checkbox" then
-                            elem.Value = not elem.Value
-                            elem.Callback(elem.Value)
-                        elseif elem.Type == "Slider" then
-                            elem.Dragging = true
-                        elseif elem.Type == "Dropdown" then
-                            elem.Expanded = not elem.Expanded
-                            tweenObject(elem, "AnimHeight", elem.Expanded and 1 or 0, 0.15)
-                        elseif elem.Type == "TextInput" then
-                            elem.Focused = true
-                        elseif elem.Type == "Keybind" then
-                            elem.Waiting = true
-                        elseif elem.Type == "ColorPicker" then
-                            elem.Open = not elem.Open
-                        end
-                    end
-                    if elem.Type == "Slider" and elem.Dragging then
-                        local barX = elem.X + elem.Width - 120
-                        local t = clamp((mx - barX) / 100, 0, 1)
-                        local newVal = elem.Min + t * (elem.Max - elem.Min)
-                        if elem.Decimals == 0 then newVal = math.floor(newVal) end
-                        elem.Value = newVal
-                        elem.Callback(elem.Value)
-                    end
-                else
-                    elem.Hover = false
-                    if elem.Type == "Slider" then elem.Dragging = false end
-                end
-            end
-            -- Scrolling
-            local scrollDelta = UserInputService:GetMouseDelta().Y
-            if my > win.Y + win.TitleHeight + win.TabHeight and my < win.Y + win.Height then
-                win.ScrollOffset = clamp(win.ScrollOffset - scrollDelta * 0.5, 0, math.max(0, win.ContentHeight - (win.Height - win.TitleHeight - win.TabHeight)))
+function Window:CreateTab(name, icon)
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Parent = self.TabBar
+    tabBtn.BackgroundColor3 = Zenith.Theme.SurfaceLight
+    tabBtn.Size = UDim2.new(0, 120, 1, 0)
+    tabBtn.Font = Enum.Font.GothamBold
+    tabBtn.Text = name
+    tabBtn.TextColor3 = Zenith.Theme.Text
+    tabBtn.TextSize = 14
+    createCorner(tabBtn, 6)
+    addGlow(tabBtn, Zenith.Theme.Primary, 1)
+    
+    local tabContent = Instance.new("ScrollingFrame")
+    tabContent.Parent = self.ContentContainer
+    tabContent.BackgroundTransparency = 1
+    tabContent.Size = UDim2.new(1, 0, 1, 0)
+    tabContent.Visible = false
+    tabContent.ScrollBarThickness = 6
+    tabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Parent = tabContent
+    layout.Padding = UDim.new(0, 12)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local padding = Instance.new("UIPadding")
+    padding.Parent = tabContent
+    padding.PaddingLeft = UDim.new(0, 15)
+    padding.PaddingRight = UDim.new(0, 15)
+    padding.PaddingTop = UDim.new(0, 15)
+    padding.PaddingBottom = UDim.new(0, 15)
+    
+    tabBtn.MouseButton1Click:Connect(function()
+        for _, btn in ipairs(self.TabBar:GetChildren()) do
+            if btn:IsA("TextButton") then
+                btn.BackgroundColor3 = Zenith.Theme.SurfaceLight
+                btn.TextColor3 = Zenith.Theme.Text
             end
         end
-    end
-
-    -- Handle keybind waiting
-    if self.HoveredElement and self.HoveredElement.Type == "Keybind" and self.HoveredElement.Waiting then
-        UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            if self.HoveredElement and self.HoveredElement.Waiting then
-                local key = input.KeyCode.Name
-                if key == "Unknown" then key = input.UserInputType.Name end
-                self.HoveredElement.Key = key
-                self.HoveredElement.Waiting = false
-                self.HoveredElement.Callback(key)
-            end
-        end):Disconnect() -- one-shot
-    end
-
-    -- Tooltip
-    if self.Tooltip and tick() - self.TooltipTimer > 2 then
-        self.Tooltip:Remove()
-        self.Tooltip = nil
-    end
-    if self.HoveredElement and not self.Tooltip then
-        local tip = (self.HoveredElement.Type == "Button" and "Click to execute") or
-                    (self.HoveredElement.Type == "Slider" and "Drag to adjust") or
-                    (self.HoveredElement.Type == "Dropdown" and "Click to expand") or
-                    nil
-        if tip then self:ShowTooltip(tip, mx, my) end
-    end
-end
-
--- ========================= MAIN DRAW =========================
-function Zenith:Draw()
-    for _, win in ipairs(self.Windows) do
-        if win.Visible then
-            drawShadow(win.X, win.Y, win.Width, win.Height)
-            drawRoundedRect(win.X, win.Y, win.Width, win.Height, 10, Zenith.Theme.Surface)
-            -- Title bar
-            drawRoundedRect(win.X, win.Y, win.Width, win.TitleHeight, 10, Zenith.Theme.Background)
-            local title = createText(win.Title, Zenith.Theme.Text, Vector2.new(win.X + 10, win.Y + 6), 16)
-            title:Draw()
-            title:Remove()
-            -- Tabs
-            local tabX = win.X + 10
-            for i, tab in ipairs(win.Tabs) do
-                local active = (tab == win.ActiveTab)
-                local tabColor = active and Zenith.Theme.Accent or Zenith.Theme.Element
-                drawRoundedRect(tabX, win.Y + win.TitleHeight, 80, win.TabHeight, 6, tabColor)
-                local tabText = createText(tab.Name, active and Zenith.Theme.Text or Zenith.Theme.TextDim, Vector2.new(tabX + 5, win.Y + win.TitleHeight + 6), 12)
-                tabText:Draw()
-                tabText:Remove()
-                tabX = tabX + 85
-            end
-            -- Elements (clipped)
-            local clipRegion = {
-                X = win.X, Y = win.Y + win.TitleHeight + win.TabHeight,
-                Width = win.Width, Height = win.Height - win.TitleHeight - win.TabHeight
-            }
-            -- Simulate clipping by checking Y bounds (draw only visible)
-            for _, elem in ipairs(win.Elements) do
-                if elem.Y + elem.Height > clipRegion.Y and elem.Y < clipRegion.Y + clipRegion.Height then
-                    if elem.Type == "Button" then drawButton(elem, RunService.RenderStepTime) end
-                    if elem.Type == "Checkbox" then drawCheckbox(elem, RunService.RenderStepTime) end
-                    if elem.Type == "Slider" then drawSlider(elem, RunService.RenderStepTime) end
-                    if elem.Type == "Dropdown" then drawDropdown(elem, RunService.RenderStepTime) end
-                    if elem.Type == "TextInput" then drawTextInput(elem, RunService.RenderStepTime) end
-                    if elem.Type == "Keybind" then drawKeybind(elem, RunService.RenderStepTime) end
-                    if elem.Type == "ColorPicker" then drawColorPicker(elem, RunService.RenderStepTime) end
-                end
-            end
+        tabBtn.BackgroundColor3 = Zenith.Theme.Primary
+        tabBtn.TextColor3 = Color3.fromRGB(0,0,0)
+        for _, child in ipairs(self.ContentContainer:GetChildren()) do
+            if child:IsA("ScrollingFrame") then child.Visible = false end
         end
-    end
-    drawNotifications()
-end
-
--- ========================= EXAMPLE DEMO (run this script alone) =========================
-local function startDemo()
-    local ui = Zenith
-    local mainWin = ui:CreateWindow("Zenith UI - Demo", 200, 150, 420, 500)
-    local general = mainWin:AddTab("General")
-    local visuals = mainWin:AddTab("Visuals")
-    local misc = mainWin:AddTab("Misc")
-
-    mainWin:AddElement(general, ElementTypes.Button("Click Me", function() ui:Notify("Button", "You clicked the button!", 2, "success") end))
-    mainWin:AddElement(general, ElementTypes.Checkbox("Enable Feature", true, function(v) print("Checkbox:", v) end))
-    mainWin:AddElement(general, ElementTypes.Slider("Volume", 0, 100, 50, function(v) print("Volume:", v) end, 0))
-    mainWin:AddElement(general, ElementTypes.Dropdown("Mode", {"Aimbot", "Triggerbot", "ESP"}, 1, function(v) print("Mode:", v) end))
-    mainWin:AddElement(general, ElementTypes.TextInput("Username", "Enter name", function(v) print("Name:", v) end))
-    mainWin:AddElement(general, ElementTypes.Keybind("Open Menu", "RightControl", function(k) print("Keybind:", k) end))
-    mainWin:AddElement(general, ElementTypes.ColorPicker("Accent Color", ui.Theme.Accent, function(c) ui.Theme.Accent = c end))
-
-    -- Run loop
-    local heartbeat
-    heartbeat = RunService.RenderStepped:Connect(function(dt)
-        ui:Update(dt)
-        ui:Draw()
+        tabContent.Visible = true
+        tabContent.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
     end)
-    return heartbeat
+    
+    -- Tab API
+    local api = {}
+    
+    function api:CreateSection(title)
+        local section = Instance.new("Frame")
+        section.Parent = tabContent
+        section.BackgroundColor3 = Zenith.Theme.Surface
+        section.Size = UDim2.new(1, 0, 0, 35)
+        section.BorderSizePixel = 0
+        createCorner(section, 6)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = section
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -20, 1, 0)
+        label.Position = UDim2.new(0, 10, 0, 0)
+        label.Font = Enum.Font.GothamBold
+        label.Text = title
+        label.TextColor3 = Zenith.Theme.Primary
+        label.TextSize = 16
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        return section
+    end
+    
+    function api:CreateButton(options)
+        local btn = Instance.new("TextButton")
+        btn.Parent = tabContent
+        btn.BackgroundColor3 = Zenith.Theme.Surface
+        btn.BorderSizePixel = 0
+        btn.Size = UDim2.new(1, 0, 0, 40)
+        btn.Font = Enum.Font.GothamBold
+        btn.Text = options.Text or "Button"
+        btn.TextColor3 = Zenith.Theme.Text
+        btn.TextSize = 16
+        createCorner(btn, 8)
+        addGlow(btn, Zenith.Theme.Primary, 1)
+        
+        btn.MouseButton1Click:Connect(function()
+            tween(btn, {BackgroundColor3 = Zenith.Theme.Primary}, 0.1)
+            tween(btn, {BackgroundColor3 = Zenith.Theme.Surface}, 0.2)
+            if options.Callback then options.Callback() end
+        end)
+        return btn
+    end
+    
+    function api:CreateToggle(options)
+        local frame = Instance.new("Frame")
+        frame.Parent = tabContent
+        frame.BackgroundColor3 = Zenith.Theme.Surface
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 0, 45)
+        createCorner(frame, 8)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = frame
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -80, 1, 0)
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Font = Enum.Font.Gotham
+        label.Text = options.Text or "Toggle"
+        label.TextColor3 = Zenith.Theme.Text
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local toggleBtn = Instance.new("TextButton")
+        toggleBtn.Parent = frame
+        toggleBtn.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        toggleBtn.Size = UDim2.new(0, 60, 0, 30)
+        toggleBtn.Position = UDim2.new(1, -72, 0, 7)
+        toggleBtn.Font = Enum.Font.GothamBold
+        toggleBtn.Text = options.Default and "ON" or "OFF"
+        toggleBtn.TextColor3 = options.Default and Zenith.Theme.Success or Zenith.Theme.TextDim
+        toggleBtn.TextSize = 12
+        createCorner(toggleBtn, 6)
+        
+        local state = options.Default or false
+        toggleBtn.MouseButton1Click:Connect(function()
+            state = not state
+            toggleBtn.Text = state and "ON" or "OFF"
+            toggleBtn.TextColor3 = state and Zenith.Theme.Success or Zenith.Theme.TextDim
+            if options.Callback then options.Callback(state) end
+        end)
+        return frame
+    end
+    
+    function api:CreateSlider(options)
+        local frame = Instance.new("Frame")
+        frame.Parent = tabContent
+        frame.BackgroundColor3 = Zenith.Theme.Surface
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 0, 70)
+        createCorner(frame, 8)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = frame
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -20, 0, 20)
+        label.Position = UDim2.new(0, 12, 0, 8)
+        label.Font = Enum.Font.Gotham
+        label.Text = options.Text or "Slider"
+        label.TextColor3 = Zenith.Theme.Text
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.Parent = frame
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Size = UDim2.new(0, 60, 0, 20)
+        valueLabel.Position = UDim2.new(1, -72, 0, 8)
+        valueLabel.Font = Enum.Font.Gotham
+        valueLabel.Text = tostring(options.Default or options.Min or 0)
+        valueLabel.TextColor3 = Zenith.Theme.Primary
+        valueLabel.TextSize = 12
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        
+        local sliderBg = Instance.new("Frame")
+        sliderBg.Parent = frame
+        sliderBg.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        sliderBg.BorderSizePixel = 0
+        sliderBg.Size = UDim2.new(1, -24, 0, 4)
+        sliderBg.Position = UDim2.new(0, 12, 0, 45)
+        createCorner(sliderBg, 2)
+        
+        local fill = Instance.new("Frame")
+        fill.Parent = sliderBg
+        fill.BackgroundColor3 = Zenith.Theme.Primary
+        fill.BorderSizePixel = 0
+        fill.Size = UDim2.new(0, 0, 1, 0)
+        createCorner(fill, 2)
+        
+        local min = options.Min or 0
+        local max = options.Max or 100
+        local value = options.Default or min
+        local decimals = options.Decimals or 0
+        
+        local function updateSlider(val)
+            val = math.clamp(val, min, max)
+            value = val
+            local percent = (val - min) / (max - min)
+            fill.Size = UDim2.new(percent, 0, 1, 0)
+            valueLabel.Text = string.format("%." .. decimals .. "f", val)
+            if options.Callback then options.Callback(val) end
+        end
+        updateSlider(value)
+        
+        local dragging = false
+        sliderBg.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                local x = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+                local newVal = min + (max - min) * x
+                updateSlider(newVal)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local x = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+                local newVal = min + (max - min) * x
+                updateSlider(newVal)
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+        return frame
+    end
+    
+    function api:CreateDropdown(options)
+        local frame = Instance.new("Frame")
+        frame.Parent = tabContent
+        frame.BackgroundColor3 = Zenith.Theme.Surface
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 0, 50)
+        createCorner(frame, 8)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = frame
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -140, 1, 0)
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Font = Enum.Font.Gotham
+        label.Text = options.Text or "Dropdown"
+        label.TextColor3 = Zenith.Theme.Text
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local dropdownBtn = Instance.new("TextButton")
+        dropdownBtn.Parent = frame
+        dropdownBtn.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        dropdownBtn.Size = UDim2.new(0, 120, 0, 32)
+        dropdownBtn.Position = UDim2.new(1, -132, 0, 9)
+        dropdownBtn.Font = Enum.Font.Gotham
+        dropdownBtn.Text = options.Default or (options.Values and options.Values[1]) or ""
+        dropdownBtn.TextColor3 = Zenith.Theme.Text
+        dropdownBtn.TextSize = 12
+        createCorner(dropdownBtn, 6)
+        
+        local expanded = false
+        local listFrame = nil
+        
+        local function closeDropdown()
+            if listFrame then listFrame:Destroy(); listFrame = nil end
+            expanded = false
+        end
+        
+        dropdownBtn.MouseButton1Click:Connect(function()
+            if expanded then closeDropdown() return end
+            expanded = true
+            listFrame = Instance.new("Frame")
+            listFrame.Parent = frame
+            listFrame.BackgroundColor3 = Zenith.Theme.SurfaceLight
+            listFrame.BorderSizePixel = 0
+            listFrame.Size = UDim2.new(0, 120, 0, 30 * #options.Values)
+            listFrame.Position = UDim2.new(1, -132, 0, 41)
+            createCorner(listFrame, 6)
+            addGlow(listFrame, Zenith.Theme.Primary, 1)
+            
+            local layout = Instance.new("UIListLayout")
+            layout.Parent = listFrame
+            layout.Padding = UDim.new(0, 2)
+            
+            for _, val in ipairs(options.Values) do
+                local item = Instance.new("TextButton")
+                item.Parent = listFrame
+                item.BackgroundColor3 = Zenith.Theme.Surface
+                item.Size = UDim2.new(1, 0, 0, 28)
+                item.Font = Enum.Font.Gotham
+                item.Text = val
+                item.TextColor3 = Zenith.Theme.Text
+                item.TextSize = 12
+                item.AutoButtonColor = true
+                item.MouseButton1Click:Connect(function()
+                    dropdownBtn.Text = val
+                    if options.Callback then options.Callback(val) end
+                    closeDropdown()
+                end)
+            end
+        end)
+        
+        -- Close on outside click
+        local function onInputBegan(input)
+            if expanded and input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mousePos = UserInputService:GetMouseLocation()
+                if listFrame then
+                    local pos = listFrame.AbsolutePosition
+                    local size = listFrame.AbsoluteSize
+                    if not (mousePos.X >= pos.X and mousePos.X <= pos.X + size.X and
+                            mousePos.Y >= pos.Y and mousePos.Y <= pos.Y + size.Y) then
+                        closeDropdown()
+                    end
+                end
+            end
+        end
+        UserInputService.InputBegan:Connect(onInputBegan)
+        return frame
+    end
+    
+    function api:CreateSearchDropdown(options)
+        -- Similar to dropdown but with search box
+        local frame = Instance.new("Frame")
+        frame.Parent = tabContent
+        frame.BackgroundColor3 = Zenith.Theme.Surface
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 0, 80)
+        createCorner(frame, 8)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = frame
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -20, 0, 20)
+        label.Position = UDim2.new(0, 12, 0, 5)
+        label.Font = Enum.Font.Gotham
+        label.Text = options.Text or "Search Dropdown"
+        label.TextColor3 = Zenith.Theme.Text
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local searchBox = Instance.new("TextBox")
+        searchBox.Parent = frame
+        searchBox.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        searchBox.Size = UDim2.new(1, -24, 0, 30)
+        searchBox.Position = UDim2.new(0, 12, 0, 28)
+        searchBox.Font = Enum.Font.Gotham
+        searchBox.PlaceholderText = "Search..."
+        searchBox.Text = ""
+        searchBox.TextColor3 = Zenith.Theme.Text
+        searchBox.TextSize = 12
+        createCorner(searchBox, 6)
+        
+        local resultFrame = Instance.new("ScrollingFrame")
+        resultFrame.Parent = frame
+        resultFrame.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        resultFrame.Size = UDim2.new(1, -24, 0, 100)
+        resultFrame.Position = UDim2.new(0, 12, 0, 62)
+        resultFrame.Visible = false
+        resultFrame.ScrollBarThickness = 4
+        createCorner(resultFrame, 6)
+        
+        local function updateResults(query)
+            for _, child in ipairs(resultFrame:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+            local filtered = {}
+            for _, val in ipairs(options.Values) do
+                if query == "" or string.lower(val):find(string.lower(query)) then
+                    table.insert(filtered, val)
+                end
+            end
+            local layout = Instance.new("UIListLayout")
+            layout.Parent = resultFrame
+            layout.Padding = UDim.new(0, 2)
+            for _, val in ipairs(filtered) do
+                local btn = Instance.new("TextButton")
+                btn.Parent = resultFrame
+                btn.BackgroundColor3 = Zenith.Theme.Surface
+                btn.Size = UDim2.new(1, 0, 0, 28)
+                btn.Font = Enum.Font.Gotham
+                btn.Text = val
+                btn.TextColor3 = Zenith.Theme.Text
+                btn.TextSize = 12
+                btn.MouseButton1Click:Connect(function()
+                    searchBox.Text = val
+                    resultFrame.Visible = false
+                    if options.Callback then options.Callback(val) end
+                end)
+            end
+            resultFrame.CanvasSize = UDim2.new(0, 0, 0, #filtered * 30)
+        end
+        
+        searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+            local query = searchBox.Text
+            if query == "" then
+                resultFrame.Visible = false
+            else
+                resultFrame.Visible = true
+                updateResults(query)
+            end
+        end)
+        
+        searchBox.FocusLost:Connect(function()
+            task.wait(0.2)
+            resultFrame.Visible = false
+        end)
+        
+        return frame
+    end
+    
+    function api:CreateColorPicker(options)
+        local frame = Instance.new("Frame")
+        frame.Parent = tabContent
+        frame.BackgroundColor3 = Zenith.Theme.Surface
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 0, 50)
+        createCorner(frame, 8)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = frame
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -80, 1, 0)
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Font = Enum.Font.Gotham
+        label.Text = options.Text or "Color Picker"
+        label.TextColor3 = Zenith.Theme.Text
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local colorBtn = Instance.new("TextButton")
+        colorBtn.Parent = frame
+        colorBtn.BackgroundColor3 = options.Default or Zenith.Theme.Primary
+        colorBtn.Size = UDim2.new(0, 60, 0, 30)
+        colorBtn.Position = UDim2.new(1, -72, 0, 10)
+        colorBtn.Text = ""
+        createCorner(colorBtn, 6)
+        addGlow(colorBtn, Zenith.Theme.Primary, 1)
+        
+        local pickerGui = nil
+        colorBtn.MouseButton1Click:Connect(function()
+            if pickerGui then pickerGui:Destroy(); pickerGui = nil; return end
+            pickerGui = Instance.new("ScreenGui")
+            pickerGui.Parent = CoreGui
+            pickerGui.Name = "ColorPicker"
+            
+            local pickerFrame = Instance.new("Frame")
+            pickerFrame.Parent = pickerGui
+            pickerFrame.BackgroundColor3 = Zenith.Theme.Surface
+            pickerFrame.Size = UDim2.new(0, 300, 0, 250)
+            pickerFrame.Position = UDim2.new(0.5, -150, 0.5, -125)
+            pickerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+            createCorner(pickerFrame, 12)
+            addGlow(pickerFrame, Zenith.Theme.Primary, 2)
+            makeDraggable(pickerFrame)
+            
+            local hueSlider = Instance.new("Frame")
+            hueSlider.Parent = pickerFrame
+            hueSlider.BackgroundColor3 = Color3.fromRGB(255,0,0)
+            hueSlider.Size = UDim2.new(0.8, 0, 0, 20)
+            hueSlider.Position = UDim2.new(0.1, 0, 0, 200)
+            createCorner(hueSlider, 10)
+            
+            local hue = 0
+            local sat = 1
+            local val = 1
+            
+            local function updateColor()
+                local color = Color3.fromHSV(hue, sat, val)
+                colorBtn.BackgroundColor3 = color
+                if options.Callback then options.Callback(color) end
+            end
+            
+            -- Simplified: just hue slider for demo
+            local draggingHue = false
+            hueSlider.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    draggingHue = true
+                    local x = math.clamp((input.Position.X - hueSlider.AbsolutePosition.X) / hueSlider.AbsoluteSize.X, 0, 1)
+                    hue = x
+                    updateColor()
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if draggingHue and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local x = math.clamp((input.Position.X - hueSlider.AbsolutePosition.X) / hueSlider.AbsoluteSize.X, 0, 1)
+                    hue = x
+                    updateColor()
+                end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    draggingHue = false
+                end
+            end)
+            
+            local closePicker = Instance.new("TextButton")
+            closePicker.Parent = pickerFrame
+            closePicker.BackgroundColor3 = Zenith.Theme.Danger
+            closePicker.Size = UDim2.new(0, 60, 0, 30)
+            closePicker.Position = UDim2.new(0.5, -30, 0, 210)
+            closePicker.Font = Enum.Font.GothamBold
+            closePicker.Text = "Close"
+            closePicker.TextColor3 = Zenith.Theme.Text
+            closePicker.TextSize = 14
+            createCorner(closePicker, 6)
+            closePicker.MouseButton1Click:Connect(function()
+                pickerGui:Destroy()
+                pickerGui = nil
+            end)
+        end)
+        return frame
+    end
+    
+    function api:CreateKeybind(options)
+        local frame = Instance.new("Frame")
+        frame.Parent = tabContent
+        frame.BackgroundColor3 = Zenith.Theme.Surface
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 0, 45)
+        createCorner(frame, 8)
+        
+        local label = Instance.new("TextLabel")
+        label.Parent = frame
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, -140, 1, 0)
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Font = Enum.Font.Gotham
+        label.Text = options.Text or "Keybind"
+        label.TextColor3 = Zenith.Theme.Text
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local keyBtn = Instance.new("TextButton")
+        keyBtn.Parent = frame
+        keyBtn.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        keyBtn.Size = UDim2.new(0, 120, 0, 32)
+        keyBtn.Position = UDim2.new(1, -132, 0, 6)
+        keyBtn.Font = Enum.Font.Gotham
+        keyBtn.Text = options.Default or "None"
+        keyBtn.TextColor3 = Zenith.Theme.Text
+        keyBtn.TextSize = 12
+        createCorner(keyBtn, 6)
+        
+        local listening = false
+        keyBtn.MouseButton1Click:Connect(function()
+            listening = true
+            keyBtn.Text = "..."
+            local connection
+            connection = UserInputService.InputBegan:Connect(function(input, gp)
+                if gp then return end
+                if listening and input.KeyCode ~= Enum.KeyCode.Unknown then
+                    local key = input.KeyCode.Name
+                    keyBtn.Text = key
+                    listening = false
+                    if options.Callback then options.Callback(key) end
+                    connection:Disconnect()
+                end
+            end)
+            task.wait(5)
+            if listening then
+                listening = false
+                keyBtn.Text = options.Default or "None"
+                connection:Disconnect()
+            end
+        end)
+        return frame
+    end
+    
+    function api:CreateLabel(text)
+        local lbl = Instance.new("TextLabel")
+        lbl.Parent = tabContent
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 0, 25)
+        lbl.Font = Enum.Font.Gotham
+        lbl.Text = text
+        lbl.TextColor3 = Zenith.Theme.TextDim
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        return lbl
+    end
+    
+    function api:CreateParagraph(text)
+        local para = Instance.new("TextLabel")
+        para.Parent = tabContent
+        para.BackgroundTransparency = 1
+        para.Size = UDim2.new(1, 0, 0, 50)
+        para.Font = Enum.Font.Gotham
+        para.Text = text
+        para.TextColor3 = Zenith.Theme.TextDim
+        para.TextSize = 12
+        para.TextWrapped = true
+        para.TextXAlignment = Enum.TextXAlignment.Left
+        return para
+    end
+    
+    function api:CreateSeparator()
+        local sep = Instance.new("Frame")
+        sep.Parent = tabContent
+        sep.BackgroundColor3 = Zenith.Theme.SurfaceLight
+        sep.Size = UDim2.new(1, 0, 0, 2)
+        sep.BorderSizePixel = 0
+        return sep
+    end
+    
+    return api
 end
 
-if game:GetService("RunService"):IsStudio() then
-    -- In Roblox Studio, demo runs automatically
-    startDemo()
+-- Public window creator
+function Zenith:CreateWindow(options)
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ZenithWindow_" .. tostring(os.clock())
+    gui.Parent = CoreGui
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local frame = Instance.new("Frame")
+    frame.Parent = gui
+    frame.BackgroundColor3 = Zenith.Theme.Background
+    frame.BorderSizePixel = 0
+    frame.Size = options.Size or UDim2.new(0, 900, 0, 600)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    createCorner(frame, 12)
+    addGlow(frame, Zenith.Theme.Primary, 2)
+    
+    -- Title bar
+    local titleBar = Instance.new("Frame")
+    titleBar.Parent = frame
+    titleBar.BackgroundColor3 = Zenith.Theme.Surface
+    titleBar.Size = UDim2.new(1, 0, 0, 45)
+    titleBar.BorderSizePixel = 0
+    createCorner(titleBar, 12)
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Parent = titleBar
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Size = UDim2.new(1, -100, 1, 0)
+    titleLabel.Position = UDim2.new(0, 15, 0, 0)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Text = options.Title or "Zenith UI"
+    titleLabel.TextColor3 = Zenith.Theme.Primary
+    titleLabel.TextSize = 18
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Parent = titleBar
+    closeBtn.BackgroundColor3 = Zenith.Theme.Danger
+    closeBtn.Size = UDim2.new(0, 35, 1, -10)
+    closeBtn.Position = UDim2.new(1, -45, 0, 5)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Zenith.Theme.Text
+    closeBtn.TextSize = 18
+    closeBtn.BorderSizePixel = 0
+    createCorner(closeBtn, 6)
+    closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+    
+    -- Tab bar
+    local tabBar = Instance.new("Frame")
+    tabBar.Parent = frame
+    tabBar.BackgroundColor3 = Zenith.Theme.Surface
+    tabBar.BorderSizePixel = 0
+    tabBar.Size = UDim2.new(1, 0, 0, 40)
+    tabBar.Position = UDim2.new(0, 0, 0, 45)
+    
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.Parent = tabBar
+    tabLayout.FillDirection = Enum.FillDirection.Horizontal
+    tabLayout.Padding = UDim.new(0, 5)
+    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    
+    -- Content container
+    local contentContainer = Instance.new("Frame")
+    contentContainer.Parent = frame
+    contentContainer.BackgroundTransparency = 1
+    contentContainer.Size = UDim2.new(1, 0, 1, -85)
+    contentContainer.Position = UDim2.new(0, 0, 0, 85)
+    
+    -- Make draggable
+    makeDraggable(frame, titleBar)
+    
+    -- Optional resizing
+    if options.Resizable then
+        makeResizable(frame, UDim2.new(0, 600, 0, 400), UDim2.new(0, 1200, 0, 800))
+    end
+    
+    local windowApi = {
+        Gui = gui,
+        Frame = frame,
+        TabBar = tabBar,
+        ContentContainer = contentContainer,
+        CreateTab = function(self, name, icon)
+            return Window:CreateTab(self, name, icon)
+        end,
+        Destroy = function() gui:Destroy() end,
+        SetTitle = function(newTitle) titleLabel.Text = newTitle end,
+    }
+    setmetatable(windowApi, {__index = Window})
+    return windowApi
+end
+
+-- Global theme setter
+function Zenith:SetTheme(themeTable)
+    for k,v in pairs(themeTable) do
+        if Zenith.Theme[k] then
+            Zenith.Theme[k] = v
+        end
+    end
 end
 
 return Zenith
