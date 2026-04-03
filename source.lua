@@ -1,658 +1,626 @@
--- Skillful-UI.lua
--- A standalone UI library for Roblox executors.
--- Forked from CSGOLib, redesigned to match the Talentless script aesthetics.
--- Provides: draggable window with toggle key, tabs, sections, buttons, labels,
--- textboxes, sliders, toggles, and built-in notifications with sound support.
--- 
--- API documentation: see separate file or comments below.
+--[[
+    Zenith UI
+    A modern, fully animated UI library for Roblox executors
+    Style: Vape V4 / Meteor Client inspired
+    Features: Windows, Tabs, Buttons, Checkboxes, Sliders, Dropdowns, TextInputs, Keybinds, ColorPickers, Notifications, Tooltips, Resizing, Scrolling
+    Dependencies: Drawing API, TweenService (standard in most executors)
+--]]
 
-local SkillfulUI = {}
-SkillfulUI.__index = SkillfulUI
-
--- Services
+local Zenith = {}
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local TextService = game:GetService("TextService")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 
--- Default Theme (Talentless style)
-local DefaultTheme = {
-    Background = Color3.fromRGB(33, 33, 41),      -- main frame
-    TitleBar = Color3.fromRGB(50, 57, 73),       -- title bar
-    Button = Color3.fromRGB(76, 82, 101),        -- button background
-    ButtonBorder = Color3.fromRGB(64, 68, 90),   -- button border
-    ButtonHover = Color3.fromRGB(90, 96, 115),   -- hover
-    Text = Color3.fromRGB(255, 255, 255),
-    Accent = Color3.fromRGB(230, 126, 34),       -- orange accent (sliders, toggles)
-    SliderBg = Color3.fromRGB(58, 58, 68),
-    SliderFill = Color3.fromRGB(230, 126, 34),
-    ToggleOff = Color3.fromRGB(64, 64, 74),
-    ToggleOn = Color3.fromRGB(230, 126, 34),
-    Border = Color3.fromRGB(20, 20, 24),
-    Success = Color3.fromRGB(46, 204, 113),
-    Error = Color3.fromRGB(231, 76, 60),
+-- ========================= THEME =========================
+Zenith.Theme = {
+    Background    = Color3.fromRGB(18, 18, 24),  -- main background
+    Surface       = Color3.fromRGB(28, 28, 36),  -- window background
+    Element       = Color3.fromRGB(38, 38, 48),  -- input background
+    Accent        = Color3.fromRGB(0, 200, 200), -- cyan accent
+    AccentDark    = Color3.fromRGB(0, 150, 150),
+    Text          = Color3.fromRGB(240, 240, 245),
+    TextDim       = Color3.fromRGB(160, 160, 180),
+    Border        = Color3.fromRGB(45, 45, 55),
+    Shadow        = Color3.fromRGB(0, 0, 0),
+    ShadowAlpha   = 0.35,
+    Success       = Color3.fromRGB(80, 200, 120),
+    Error         = Color3.fromRGB(220, 60, 60),
 }
 
--- Internal: fit text to button width (auto-shrink)
-local function fitText(button)
-    local size = button.TextSize
-    while size > 1 do
-        local bounds = TextService:GetTextSize(button.Text, size, button.Font, Vector2.new(math.huge, math.huge))
-        if bounds.X <= button.AbsoluteSize.X then break end
-        size = size - 1
-        button.TextSize = size
+Zenith.Font = Drawing.Fonts.UI
+Zenith.FontSize = 14
+Zenith.AnimationSpeed = 0.2
+Zenith.Notifications = {}
+Zenith.Tooltip = nil
+Zenith.TooltipTimer = 0
+
+-- ========================= UTILITIES =========================
+local function createSquare(color, pos, size, filled, thickness)
+    local sq = Drawing.new("Square")
+    sq.Color = color
+    sq.Position = pos
+    sq.Size = size
+    sq.Filled = filled ~= false
+    sq.Thickness = thickness or 0
+    return sq
+end
+
+local function createText(text, color, pos, size, font)
+    local txt = Drawing.new("Text")
+    txt.Text = text
+    txt.Color = color
+    txt.Position = pos
+    txt.Size = size or Zenith.FontSize
+    txt.Font = font or Zenith.Font
+    txt.Center = false
+    txt.Outline = false
+    return txt
+end
+
+local function drawShadow(x, y, w, h, alpha)
+    for i = 1, 4 do
+        local shadow = createSquare(Zenith.Theme.Shadow, Vector2.new(x - i*2, y - i), Vector2.new(w + i*4, h + i*2), true)
+        shadow.Transparency = (alpha or Zenith.Theme.ShadowAlpha) * (1 - i/5)
+        shadow:Draw()
+        shadow:Remove()
     end
-    return size
 end
 
--- Internal: play sound (if sound ID provided)
-local function playSound(soundId, volume)
-    if not soundId then return end
-    local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://" .. soundId
-    sound.Volume = volume or 0.3
-    sound.Parent = LocalPlayer.Character or LocalPlayer
-    sound:Play()
+local function tweenObject(obj, prop, target, duration, style, direction)
+    local info = TweenInfo.new(duration or Zenith.AnimationSpeed, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out)
+    local tween = TweenService:Create(obj, info, {[prop] = target})
+    tween:Play()
+    return tween
 end
 
--- Internal: make GUI draggable
-local function makeDraggable(gui, dragHandle)
-    dragHandle = dragHandle or gui
-    local dragging, dragInput, dragStart, startPos
-    local function update(input)
-        local delta = input.Position - dragStart
-        gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-    dragHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = gui.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    dragHandle.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
-        end
-    end)
-end
+local function clamp(v, min, max) return math.min(max, math.max(min, v)) end
 
--- ============================================
--- Window Class
--- ============================================
+-- ========================= WINDOW MANAGER =========================
+Zenith.Windows = {}
+Zenith.ActiveWindow = nil
+Zenith.DragOffset = Vector2.new()
+Zenith.ResizeEdge = nil
+Zenith.HoveredElement = nil
 
+-- ========================= WINDOW CLASS =========================
 local Window = {}
 Window.__index = Window
 
-function SkillfulUI:Window(options)
-    options = options or {}
-    local title = options.Name or "Skillful"
-    local size = options.Size or Vector2.new(500, 400)
-    local toggleKey = options.ShowToggleKey
-    local center = options.Center == nil and true or options.Center
-    local sounds = options.Sounds or {}  -- { open, close, click, error, success }
-    local theme = options.Theme or DefaultTheme
-    
-    local window = {}
-    setmetatable(window, Window)
-    window.Tabs = {}
-    window.CurrentTab = nil
-    window.Visible = true
-    window.CloseCallbacks = {}
-    window.Sounds = sounds
-    window.Theme = theme
-    
-    -- ScreenGui
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "SkillfulUI_Window"
-    screenGui.Parent = game:GetService("CoreGui")
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    -- Main frame
-    local frame = Instance.new("Frame")
-    frame.Name = "MainFrame"
-    frame.Parent = screenGui
-    frame.BackgroundColor3 = theme.Background
-    frame.BorderSizePixel = 0
-    if center then
-        frame.Position = UDim2.new(0.5, -size.X/2, 0.5, -size.Y/2)
-        frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    else
-        frame.Position = UDim2.new(0, 100, 0, 100)
-    end
-    frame.Size = UDim2.new(0, size.X, 0, size.Y)
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = frame
-    
-    -- Title bar
-    local titleBar = Instance.new("Frame")
-    titleBar.Parent = frame
-    titleBar.BackgroundColor3 = theme.TitleBar
-    titleBar.Size = UDim2.new(1, 0, 0, 40)
-    titleBar.BorderSizePixel = 0
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 6)
-    titleCorner.Parent = titleBar
-    
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Parent = titleBar
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Size = UDim2.new(1, -80, 1, 0)
-    titleLabel.Position = UDim2.new(0, 10, 0, 0)
-    titleLabel.Text = title
-    titleLabel.TextColor3 = theme.Text
-    titleLabel.TextSize = 18
-    titleLabel.Font = Enum.Font.SourceSansBold
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    
-    -- Close button
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Parent = titleBar
-    closeBtn.BackgroundColor3 = theme.Button
-    closeBtn.BorderColor3 = theme.ButtonBorder
-    closeBtn.BorderSizePixel = 2
-    closeBtn.Size = UDim2.new(0, 35, 0, 35)
-    closeBtn.Position = UDim2.new(1, -40, 0, 2.5)
-    closeBtn.Text = "✕"
-    closeBtn.TextColor3 = theme.Text
-    closeBtn.TextSize = 20
-    closeBtn.Font = Enum.Font.SourceSansBold
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 4)
-    closeCorner.Parent = closeBtn
-    closeBtn.MouseButton1Click:Connect(function()
-        window:Destroy()
-        playSound(sounds.close, 0.3)
-    end)
-    
-    -- Toggle visibility keybind
-    if toggleKey then
-        UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            if input.KeyCode == toggleKey then
-                window:Toggle()
-            end
-        end)
-    end
-    
-    -- Make window draggable
-    makeDraggable(frame, titleBar)
-    
-    -- Left sidebar for tabs
-    local tabContainer = Instance.new("ScrollingFrame")
-    tabContainer.Parent = frame
-    tabContainer.BackgroundColor3 = theme.Button
-    tabContainer.BorderSizePixel = 0
-    tabContainer.Position = UDim2.new(0, 0, 0, 40)
-    tabContainer.Size = UDim2.new(0, 120, 1, -40)
-    tabContainer.ScrollBarThickness = 4
-    tabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-    tabContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    
-    local tabLayout = Instance.new("UIListLayout")
-    tabLayout.Parent = tabContainer
-    tabLayout.Padding = UDim.new(0, 5)
-    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    
-    local tabPadding = Instance.new("UIPadding")
-    tabPadding.Parent = tabContainer
-    tabPadding.PaddingTop = UDim.new(0, 10)
-    tabPadding.PaddingBottom = UDim.new(0, 10)
-    
-    -- Right content area
-    local contentContainer = Instance.new("Frame")
-    contentContainer.Parent = frame
-    contentContainer.BackgroundColor3 = theme.Background
-    contentContainer.BorderSizePixel = 0
-    contentContainer.Position = UDim2.new(0, 125, 0, 45)
-    contentContainer.Size = UDim2.new(1, -130, 1, -50)
-    
-    local contentCorner = Instance.new("UICorner")
-    contentCorner.CornerRadius = UDim.new(0, 4)
-    contentCorner.Parent = contentContainer
-    
-    -- Internal methods
-    function window:Destroy()
-        for _, cb in ipairs(self.CloseCallbacks) do
-            pcall(cb)
-        end
-        screenGui:Destroy()
-    end
-    
-    function window:SetVisible(visible)
-        frame.Visible = visible
-        self.Visible = visible
-        if visible then
-            playSound(sounds.open, 0.2)
-        else
-            playSound(sounds.close, 0.2)
-        end
-    end
-    
-    function window:Toggle()
-        self:SetVisible(not self.Visible)
-    end
-    
-    function window:OnClose(callback)
-        table.insert(self.CloseCallbacks, callback)
-    end
-    
-    -- Built-in notification system
-    function window:Notify(title, message, duration, isError)
-        local notif = Instance.new("Frame")
-        notif.Parent = screenGui
-        notif.BackgroundColor3 = isError and theme.Error or theme.Success
-        notif.BorderSizePixel = 0
-        notif.Size = UDim2.new(0, 250, 0, 60)
-        notif.Position = UDim2.new(1, -270, 0, 10)
-        notif.AnchorPoint = Vector2.new(1, 0)
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 6)
-        corner.Parent = notif
-        
-        local titleLbl = Instance.new("TextLabel")
-        titleLbl.Parent = notif
-        titleLbl.BackgroundTransparency = 1
-        titleLbl.Size = UDim2.new(1, -20, 0, 25)
-        titleLbl.Position = UDim2.new(0, 10, 0, 5)
-        titleLbl.Text = title
-        titleLbl.TextColor3 = Color3.fromRGB(255,255,255)
-        titleLbl.TextSize = 14
-        titleLbl.Font = Enum.Font.SourceSansBold
-        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-        
-        local msgLbl = Instance.new("TextLabel")
-        msgLbl.Parent = notif
-        msgLbl.BackgroundTransparency = 1
-        msgLbl.Size = UDim2.new(1, -20, 0, 25)
-        msgLbl.Position = UDim2.new(0, 10, 0, 30)
-        msgLbl.Text = message
-        msgLbl.TextColor3 = Color3.fromRGB(255,255,255)
-        msgLbl.TextSize = 12
-        msgLbl.Font = Enum.Font.SourceSans
-        msgLbl.TextXAlignment = Enum.TextXAlignment.Left
-        
-        TweenService:Create(notif, TweenInfo.new(0.3), {Position = UDim2.new(1, -20, 0, 10)}):Play()
-        task.wait(duration or 3)
-        TweenService:Create(notif, TweenInfo.new(0.3), {Position = UDim2.new(1, 10, 0, 10)}):Play()
-        task.wait(0.3)
-        notif:Destroy()
-        if isError then
-            playSound(sounds.error, 0.5)
-        else
-            playSound(sounds.success, 0.5)
-        end
-    end
-    
-    -- Tab creation
-    function window:Tab(tabOptions)
-        local tab = {}
-        tab.Name = tabOptions.Name or "Tab"
-        tab.Sections = {}
-        tab.Container = Instance.new("ScrollingFrame")
-        tab.Container.Parent = contentContainer
-        tab.Container.BackgroundTransparency = 1
-        tab.Container.BorderSizePixel = 0
-        tab.Container.Size = UDim2.new(1, 0, 1, 0)
-        tab.Container.ScrollBarThickness = 6
-        tab.Container.CanvasSize = UDim2.new(0, 0, 0, 0)
-        tab.Container.AutomaticCanvasSize = Enum.AutomaticSize.Y
-        tab.Container.Visible = false
-        
-        local containerLayout = Instance.new("UIListLayout")
-        containerLayout.Parent = tab.Container
-        containerLayout.Padding = UDim.new(0, 10)
-        containerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        
-        local containerPadding = Instance.new("UIPadding")
-        containerPadding.Parent = tab.Container
-        containerPadding.PaddingTop = UDim.new(0, 10)
-        containerPadding.PaddingBottom = UDim.new(0, 10)
-        
-        -- Tab button (left sidebar)
-        local tabButton = Instance.new("TextButton")
-        tabButton.Parent = tabContainer
-        tabButton.BackgroundColor3 = theme.Button
-        tabButton.BorderColor3 = theme.ButtonBorder
-        tabButton.BorderSizePixel = 2
-        tabButton.Size = UDim2.new(0, 110, 0, 35)
-        tabButton.Text = tab.Name
-        tabButton.TextColor3 = theme.Text
-        tabButton.TextSize = 14
-        tabButton.Font = Enum.Font.SourceSansBold
-        local tabCorner = Instance.new("UICorner")
-        tabCorner.CornerRadius = UDim.new(0, 4)
-        tabCorner.Parent = tabButton
-        fitText(tabButton)
-        
-        tabButton.MouseButton1Click:Connect(function()
-            if window.CurrentTab then
-                window.CurrentTab.Container.Visible = false
-                window.CurrentTab.Button.BackgroundColor3 = theme.Button
-            end
-            window.CurrentTab = tab
-            tab.Container.Visible = true
-            tabButton.BackgroundColor3 = theme.Accent
-            playSound(sounds.click, 0.2)
-        end)
-        
-        tab.Button = tabButton
-        
-        -- Section creation
-        function tab:Section(sectionOptions)
-            local section = {}
-            section.Name = sectionOptions.Name or "Section"
-            section.Container = Instance.new("Frame")
-            section.Container.Parent = tab.Container
-            section.Container.BackgroundColor3 = theme.Button
-            section.Container.BorderSizePixel = 0
-            section.Container.Size = UDim2.new(0, 340, 0, 0)
-            section.Container.AutomaticSize = Enum.AutomaticSize.Y
-            
-            local sectionCorner = Instance.new("UICorner")
-            sectionCorner.CornerRadius = UDim.new(0, 6)
-            sectionCorner.Parent = section.Container
-            
-            local sectionTitle = Instance.new("TextLabel")
-            sectionTitle.Parent = section.Container
-            sectionTitle.BackgroundColor3 = theme.TitleBar
-            sectionTitle.Size = UDim2.new(1, 0, 0, 30)
-            sectionTitle.Text = "  " .. section.Name
-            sectionTitle.TextColor3 = theme.Text
-            sectionTitle.TextSize = 16
-            sectionTitle.Font = Enum.Font.SourceSansBold
-            sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
-            local titleCorner2 = Instance.new("UICorner")
-            titleCorner2.CornerRadius = UDim.new(0, 6)
-            titleCorner2.Parent = sectionTitle
-            
-            local contentFrame = Instance.new("Frame")
-            contentFrame.Parent = section.Container
-            contentFrame.BackgroundTransparency = 1
-            contentFrame.Position = UDim2.new(0, 0, 0, 35)
-            contentFrame.Size = UDim2.new(1, 0, 0, 0)
-            contentFrame.AutomaticSize = Enum.AutomaticSize.Y
-            
-            local contentLayout = Instance.new("UIListLayout")
-            contentLayout.Parent = contentFrame
-            contentLayout.Padding = UDim.new(0, 8)
-            contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-            
-            local contentPadding = Instance.new("UIPadding")
-            contentPadding.Parent = contentFrame
-            contentPadding.PaddingLeft = UDim.new(0, 10)
-            contentPadding.PaddingRight = UDim.new(0, 10)
-            contentPadding.PaddingTop = UDim.new(0, 10)
-            contentPadding.PaddingBottom = UDim.new(0, 10)
-            
-            section.Elements = {}
-            
-            local function addElement(element)
-                element.Parent = contentFrame
-                table.insert(section.Elements, element)
-                return element
-            end
-            
-            -- Label
-            function section:Label(labelOptions)
-                local label = Instance.new("TextLabel")
-                label.BackgroundTransparency = 1
-                label.Size = UDim2.new(1, 0, 0, 25)
-                label.Text = labelOptions.Name or ""
-                label.TextColor3 = theme.Text
-                label.TextSize = 14
-                label.Font = Enum.Font.SourceSans
-                label.TextXAlignment = Enum.TextXAlignment.Left
-                addElement(label)
-                local obj = { Instance = label }
-                function obj:Set(newText)
-                    label.Text = newText
-                end
-                return obj
-            end
-            
-            -- Button
-            function section:Button(buttonOptions)
-                local btn = Instance.new("TextButton")
-                btn.BackgroundColor3 = theme.Button
-                btn.BorderColor3 = theme.ButtonBorder
-                btn.BorderSizePixel = 2
-                btn.Size = UDim2.new(1, 0, 0, 35)
-                btn.Text = buttonOptions.Name or "Button"
-                btn.TextColor3 = theme.Text
-                btn.TextSize = 14
-                btn.Font = Enum.Font.SourceSansBold
-                local btnCorner = Instance.new("UICorner")
-                btnCorner.CornerRadius = UDim.new(0, 4)
-                btnCorner.Parent = btn
-                fitText(btn)
-                
-                btn.MouseEnter:Connect(function()
-                    TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = theme.ButtonHover}):Play()
-                end)
-                btn.MouseLeave:Connect(function()
-                    TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = theme.Button}):Play()
-                end)
-                btn.MouseButton1Click:Connect(function()
-                    playSound(sounds.click, 0.2)
-                    if buttonOptions.Callback then buttonOptions.Callback() end
-                end)
-                addElement(btn)
-                return btn
-            end
-            
-            -- TextBox
-            function section:TextBox(textBoxOptions)
-                local container = Instance.new("Frame")
-                container.BackgroundTransparency = 1
-                container.Size = UDim2.new(1, 0, 0, 35)
-                container.AutomaticSize = Enum.AutomaticSize.Y
-                
-                local box = Instance.new("TextBox")
-                box.Parent = container
-                box.BackgroundColor3 = theme.SliderBg
-                box.BorderSizePixel = 0
-                box.Size = UDim2.new(1, 0, 0, 35)
-                box.PlaceholderText = textBoxOptions.Placeholder or ""
-                box.Text = ""
-                box.TextColor3 = theme.Text
-                box.Font = Enum.Font.SourceSans
-                box.TextSize = 14
-                local boxCorner = Instance.new("UICorner")
-                boxCorner.CornerRadius = UDim.new(0, 4)
-                boxCorner.Parent = box
-                
-                local callback = textBoxOptions.Callback
-                box:GetPropertyChangedSignal("Text"):Connect(function()
-                    if callback then callback(box.Text) end
-                end)
-                addElement(container)
-                return box
-            end
-            
-            -- Slider
-            function section:Slider(sliderOptions)
-                local container = Instance.new("Frame")
-                container.BackgroundTransparency = 1
-                container.Size = UDim2.new(1, 0, 0, 50)
-                
-                local nameLabel = Instance.new("TextLabel")
-                nameLabel.Parent = container
-                nameLabel.BackgroundTransparency = 1
-                nameLabel.Size = UDim2.new(1, 0, 0, 20)
-                nameLabel.Text = sliderOptions.Name or "Slider"
-                nameLabel.TextColor3 = theme.Text
-                nameLabel.TextSize = 12
-                nameLabel.Font = Enum.Font.SourceSans
-                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-                
-                local valueLabel = Instance.new("TextLabel")
-                valueLabel.Parent = container
-                valueLabel.BackgroundTransparency = 1
-                valueLabel.Size = UDim2.new(0, 50, 0, 20)
-                valueLabel.Position = UDim2.new(1, -50, 0, 0)
-                valueLabel.Text = tostring(sliderOptions.Default or 0)
-                valueLabel.TextColor3 = theme.Accent
-                valueLabel.TextSize = 12
-                valueLabel.Font = Enum.Font.SourceSansBold
-                valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-                
-                local sliderBg = Instance.new("Frame")
-                sliderBg.Parent = container
-                sliderBg.BackgroundColor3 = theme.SliderBg
-                sliderBg.BorderSizePixel = 0
-                sliderBg.Position = UDim2.new(0, 0, 0, 25)
-                sliderBg.Size = UDim2.new(1, 0, 0, 8)
-                local sliderCorner = Instance.new("UICorner")
-                sliderCorner.CornerRadius = UDim.new(0, 4)
-                sliderCorner.Parent = sliderBg
-                
-                local sliderFill = Instance.new("Frame")
-                sliderFill.Parent = sliderBg
-                sliderFill.BackgroundColor3 = theme.SliderFill
-                sliderFill.BorderSizePixel = 0
-                sliderFill.Size = UDim2.new(0, 0, 1, 0)
-                local fillCorner = Instance.new("UICorner")
-                fillCorner.CornerRadius = UDim.new(0, 4)
-                fillCorner.Parent = sliderFill
-                
-                local min = sliderOptions.Min or 0
-                local max = sliderOptions.Max or 100
-                local value = sliderOptions.Default or min
-                
-                local function updateSlider(val)
-                    value = math.clamp(val, min, max)
-                    local percent = (value - min) / (max - min)
-                    sliderFill.Size = UDim2.new(percent, 0, 1, 0)
-                    valueLabel.Text = tostring(math.floor(value * 100) / 100)
-                    if sliderOptions.Callback then sliderOptions.Callback(value) end
-                end
-                updateSlider(value)
-                
-                local dragging = false
-                sliderBg.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        dragging = true
-                        local percent = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-                        updateSlider(min + percent * (max - min))
-                    end
-                end)
-                UserInputService.InputChanged:Connect(function(input)
-                    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                        local percent = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-                        updateSlider(min + percent * (max - min))
-                    end
-                end)
-                UserInputService.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        dragging = false
-                    end
-                end)
-                
-                addElement(container)
-                local obj = { Instance = container }
-                function obj:Set(newVal)
-                    updateSlider(newVal)
-                end
-                return obj
-            end
-            
-            -- Toggle
-            function section:Toggle(toggleOptions)
-                local container = Instance.new("Frame")
-                container.BackgroundTransparency = 1
-                container.Size = UDim2.new(1, 0, 0, 35)
-                
-                local nameLabel = Instance.new("TextLabel")
-                nameLabel.Parent = container
-                nameLabel.BackgroundTransparency = 1
-                nameLabel.Size = UDim2.new(1, -60, 0, 35)
-                nameLabel.Text = toggleOptions.Name or "Toggle"
-                nameLabel.TextColor3 = theme.Text
-                nameLabel.TextSize = 14
-                nameLabel.Font = Enum.Font.SourceSans
-                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-                
-                local toggleBg = Instance.new("Frame")
-                toggleBg.Parent = container
-                toggleBg.BackgroundColor3 = theme.ToggleOff
-                toggleBg.BorderSizePixel = 0
-                toggleBg.Position = UDim2.new(1, -50, 0, 5)
-                toggleBg.Size = UDim2.new(0, 45, 0, 25)
-                local toggleCorner = Instance.new("UICorner")
-                toggleCorner.CornerRadius = UDim.new(1, 0)
-                toggleCorner.Parent = toggleBg
-                
-                local toggleKnob = Instance.new("Frame")
-                toggleKnob.Parent = toggleBg
-                toggleKnob.BackgroundColor3 = theme.Text
-                toggleKnob.BorderSizePixel = 0
-                toggleKnob.Size = UDim2.new(0, 21, 0, 21)
-                toggleKnob.Position = UDim2.new(0, 2, 0, 2)
-                local knobCorner = Instance.new("UICorner")
-                knobCorner.CornerRadius = UDim.new(1, 0)
-                knobCorner.Parent = toggleKnob
-                
-                local state = toggleOptions.Default or false
-                local callback = toggleOptions.Callback
-                
-                local function updateToggle()
-                    if state then
-                        toggleBg.BackgroundColor3 = theme.ToggleOn
-                        toggleKnob.Position = UDim2.new(1, -23, 0, 2)
-                    else
-                        toggleBg.BackgroundColor3 = theme.ToggleOff
-                        toggleKnob.Position = UDim2.new(0, 2, 0, 2)
-                    end
-                    if callback then callback(state) end
-                end
-                updateToggle()
-                
-                toggleBg.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        state = not state
-                        updateToggle()
-                        playSound(sounds.click, 0.2)
-                    end
-                end)
-                
-                addElement(container)
-                local obj = { Instance = container }
-                function obj:Set(newState)
-                    state = newState
-                    updateToggle()
-                end
-                return obj
-            end
-            
-            table.insert(tab.Sections, section)
-            return section
-        end
-        
-        table.insert(window.Tabs, tab)
-        if #window.Tabs == 1 then
-            window.CurrentTab = tab
-            tab.Container.Visible = true
-            tabButton.BackgroundColor3 = theme.Accent
-        end
-        
-        return tab
-    end
-    
-    return window
+function Zenith:CreateWindow(title, x, y, w, h)
+    local newWindow = setmetatable({
+        Title = title,
+        X = x, Y = y, Width = w, Height = h,
+        MinWidth = 300, MinHeight = 200,
+        Visible = true,
+        Dragging = false,
+        Resizing = false,
+        Tabs = {},
+        ActiveTab = nil,
+        ScrollOffset = 0,
+        Closable = true,
+        Resizable = true,
+        TabHeight = 28,
+        TitleHeight = 30,
+        Elements = {}, -- flattened for layout
+    }, Window)
+    table.insert(Zenith.Windows, newWindow)
+    return newWindow
 end
 
-return SkillfulUI
+function Window:AddTab(name)
+    local tab = { Name = name, Elements = {} }
+    table.insert(self.Tabs, tab)
+    if not self.ActiveTab then self.ActiveTab = tab end
+    self:RefreshLayout()
+    return tab
+end
+
+function Window:AddElement(tab, element)
+    element.Window = self
+    element.Tab = tab
+    element.Hover = false
+    element.AnimProgress = 0
+    element.AnimValue = 0
+    table.insert(tab.Elements, element)
+    self:RefreshLayout()
+    return element
+end
+
+function Window:RefreshLayout()
+    if not self.ActiveTab then return end
+    local y = self.Y + self.TitleHeight + self.TabHeight + 8
+    local padding = 8
+    local contentX = self.X + padding
+    local contentW = self.Width - padding * 2
+    self.Elements = {}
+    for _, elem in ipairs(self.ActiveTab.Elements) do
+        elem.X = contentX
+        elem.Y = y - self.ScrollOffset
+        elem.Width = contentW
+        elem.Height = 32
+        if elem.Type == "Dropdown" and elem.Expanded then
+            elem.Height = 32 + (#elem.Options * 28) * elem.AnimHeight
+        elseif elem.Type == "ColorPicker" and elem.Open then
+            elem.Height = 180
+        elseif elem.Type == "Slider" then
+            elem.Height = 38
+        elseif elem.Type == "TextInput" then
+            elem.Height = 42
+        elseif elem.Type == "Keybind" then
+            elem.Height = 38
+        end
+        table.insert(self.Elements, elem)
+        y = y + elem.Height + 6
+    end
+    self.ContentHeight = y - self.Y - self.TitleHeight - self.TabHeight
+end
+
+-- ========================= ELEMENT TYPES =========================
+local ElementTypes = {}
+
+function ElementTypes.Button(label, callback)
+    return {
+        Type = "Button",
+        Label = label,
+        Callback = callback,
+    }
+end
+
+function ElementTypes.Checkbox(label, initial, callback)
+    return {
+        Type = "Checkbox",
+        Label = label,
+        Value = initial or false,
+        Callback = callback,
+        AnimValue = initial and 1 or 0,
+    }
+end
+
+function ElementTypes.Slider(label, min, max, initial, callback, decimals)
+    return {
+        Type = "Slider",
+        Label = label,
+        Min = min or 0,
+        Max = max or 100,
+        Value = initial or 0,
+        Decimals = decimals or 0,
+        Callback = callback,
+        Dragging = false,
+        AnimValue = (initial - min)/(max - min) or 0,
+    }
+end
+
+function ElementTypes.Dropdown(label, options, selected, callback)
+    return {
+        Type = "Dropdown",
+        Label = label,
+        Options = options,
+        Selected = selected or 1,
+        Callback = callback,
+        Expanded = false,
+        AnimHeight = 0,
+    }
+end
+
+function ElementTypes.TextInput(label, placeholder, callback)
+    return {
+        Type = "TextInput",
+        Label = label,
+        Placeholder = placeholder or "",
+        Value = "",
+        Callback = callback,
+        Focused = false,
+    }
+end
+
+function ElementTypes.Keybind(label, initialKey, callback)
+    return {
+        Type = "Keybind",
+        Label = label,
+        Key = initialKey or "None",
+        Callback = callback,
+        Waiting = false,
+    }
+end
+
+function ElementTypes.ColorPicker(label, initialColor, callback)
+    return {
+        Type = "ColorPicker",
+        Label = label,
+        Color = initialColor or Zenith.Theme.Accent,
+        Callback = callback,
+        Hue = 0, Sat = 1, Val = 1,
+        Open = false,
+    }
+end
+
+-- ========================= DRAWING FUNCTIONS =========================
+local function drawRoundedRect(x, y, w, h, radius, color, transparency)
+    local sq = createSquare(color, Vector2.new(x, y), Vector2.new(w, h), true)
+    sq.Transparency = transparency or 0
+    sq:Draw()
+    sq:Remove()
+    -- simple corner circles for roundness
+    local circle = Drawing.new("Circle")
+    circle.Filled = true
+    circle.Color = color
+    circle.Transparency = transparency or 0
+    circle.Radius = radius
+    circle.Position = Vector2.new(x + radius, y + radius)
+    circle:Draw()
+    circle.Position = Vector2.new(x + w - radius, y + radius)
+    circle:Draw()
+    circle.Position = Vector2.new(x + radius, y + h - radius)
+    circle:Draw()
+    circle.Position = Vector2.new(x + w - radius, y + h - radius)
+    circle:Draw()
+    circle:Remove()
+end
+
+local function drawButton(elem, dt)
+    local target = elem.Hover and 1 or 0
+    elem.AnimProgress = elem.AnimProgress + (target - elem.AnimProgress) * dt * 12
+    local color = Zenith.Theme.Accent:Lerp(Zenith.Theme.AccentDark, elem.AnimProgress)
+    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, color)
+    local text = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 12, elem.Y + elem.Height/2 - 8))
+    text:Draw()
+    text:Remove()
+end
+
+local function drawCheckbox(elem, dt)
+    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, Zenith.Theme.Element)
+    local box = createSquare(Zenith.Theme.Accent, Vector2.new(elem.X + 8, elem.Y + 6), Vector2.new(20, 20), true)
+    box:Draw()
+    box:Remove()
+    local target = elem.Value and 1 or 0
+    elem.AnimValue = elem.AnimValue + (target - elem.AnimValue) * dt * 15
+    if elem.AnimValue > 0.05 then
+        local check = createText("✔", Zenith.Theme.Text, Vector2.new(elem.X + 12, elem.Y + 4), 16)
+        check.Transparency = elem.AnimValue
+        check:Draw()
+        check:Remove()
+    end
+    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 36, elem.Y + elem.Height/2 - 8))
+    label:Draw()
+    label:Remove()
+end
+
+local function drawSlider(elem, dt)
+    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, Zenith.Theme.Element)
+    local label = createText(elem.Label .. ": " .. string.format("%."..(elem.Decimals or 0).."f", elem.Value), Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 6))
+    label:Draw()
+    label:Remove()
+    local barX = elem.X + elem.Width - 120
+    local barW = 100
+    drawRoundedRect(barX, elem.Y + elem.Height - 12, barW, 6, 3, Zenith.Theme.Background)
+    local target = (elem.Value - elem.Min) / (elem.Max - elem.Min)
+    elem.AnimValue = elem.AnimValue + (target - elem.AnimValue) * dt * 12
+    drawRoundedRect(barX, elem.Y + elem.Height - 12, barW * elem.AnimValue, 6, 3, Zenith.Theme.Accent)
+end
+
+local function drawDropdown(elem, dt)
+    local bgColor = elem.Expanded and Zenith.Theme.Accent or Zenith.Theme.Element
+    drawRoundedRect(elem.X, elem.Y, elem.Width, 32, 6, bgColor)
+    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 8))
+    label:Draw()
+    label:Remove()
+    local current = elem.Options[elem.Selected] or ""
+    local valueText = createText(current, Zenith.Theme.TextDim, Vector2.new(elem.X + elem.Width - 80, elem.Y + 8))
+    valueText:Draw()
+    valueText:Remove()
+    local arrow = createText(elem.Expanded and "▲" or "▼", Zenith.Theme.Text, Vector2.new(elem.X + elem.Width - 20, elem.Y + 6), 12)
+    arrow:Draw()
+    arrow:Remove()
+    if elem.Expanded then
+        local optY = elem.Y + 32
+        for i, opt in ipairs(elem.Options) do
+            drawRoundedRect(elem.X, optY, elem.Width, 28, 4, Zenith.Theme.Surface)
+            local optColor = (i == elem.Selected) and Zenith.Theme.Accent or Zenith.Theme.Text
+            local optText = createText(opt, optColor, Vector2.new(elem.X + 12, optY + 6))
+            optText:Draw()
+            optText:Remove()
+            optY = optY + 28
+        end
+    end
+    local targetHeight = elem.Expanded and 1 or 0
+    elem.AnimHeight = elem.AnimHeight + (targetHeight - elem.AnimHeight) * dt * 10
+end
+
+local function drawTextInput(elem, dt)
+    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, elem.Focused and Zenith.Theme.Accent or Zenith.Theme.Element)
+    local label = createText(elem.Label, Zenith.Theme.TextDim, Vector2.new(elem.X + 8, elem.Y + 4), 11)
+    label:Draw()
+    label:Remove()
+    local displayText = (elem.Value == "" and elem.Placeholder) or elem.Value
+    local textColor = (elem.Value == "" and elem.Placeholder ~= "") and Zenith.Theme.TextDim or Zenith.Theme.Text
+    local inputText = createText(displayText, textColor, Vector2.new(elem.X + 8, elem.Y + 20), 13)
+    inputText:Draw()
+    inputText:Remove()
+    if elem.Focused then
+        local cursor = createText("|", Zenith.Theme.Accent, Vector2.new(elem.X + 8 + (#displayText * 6), elem.Y + 18), 14)
+        cursor:Draw()
+        cursor:Remove()
+    end
+end
+
+local function drawKeybind(elem, dt)
+    drawRoundedRect(elem.X, elem.Y, elem.Width, elem.Height, 6, elem.Waiting and Zenith.Theme.Accent or Zenith.Theme.Element)
+    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 6))
+    label:Draw()
+    label:Remove()
+    local keyText = elem.Waiting and "Press any key..." or tostring(elem.Key)
+    local keyColor = elem.Waiting and Zenith.Theme.Accent or Zenith.Theme.TextDim
+    local keyLabel = createText(keyText, keyColor, Vector2.new(elem.X + elem.Width - 100, elem.Y + 8))
+    keyLabel:Draw()
+    keyLabel:Remove()
+end
+
+local function drawColorPicker(elem, dt)
+    drawRoundedRect(elem.X, elem.Y, elem.Width, 32, 6, Zenith.Theme.Element)
+    local label = createText(elem.Label, Zenith.Theme.Text, Vector2.new(elem.X + 8, elem.Y + 8))
+    label:Draw()
+    label:Remove()
+    local preview = createSquare(elem.Color, Vector2.new(elem.X + elem.Width - 30, elem.Y + 6), Vector2.new(20, 20), true)
+    preview:Draw()
+    preview:Remove()
+    if elem.Open then
+        drawRoundedRect(elem.X, elem.Y + 32, elem.Width, 148, 6, Zenith.Theme.Surface)
+        -- simplified color wheel representation (just a gradient bar for hue)
+        for i = 0, elem.Width - 20 do
+            local hue = i / (elem.Width - 20)
+            local color = Color3.fromHSV(hue, 1, 1)
+            local bar = createSquare(color, Vector2.new(elem.X + 10 + i, elem.Y + 40), Vector2.new(1, 12), true)
+            bar:Draw()
+            bar:Remove()
+        end
+        local indicator = createSquare(Color3.fromRGB(255,255,255), Vector2.new(elem.X + 10 + (elem.Hue * (elem.Width - 20)), elem.Y + 38), Vector2.new(2, 16), true)
+        indicator:Draw()
+        indicator:Remove()
+    end
+end
+
+-- ========================= NOTIFICATIONS =========================
+function Zenith:Notify(title, message, duration, type)
+    local notif = {
+        Title = title,
+        Message = message,
+        Duration = duration or 3,
+        Type = type or "info",
+        StartTime = tick(),
+        Y = 50,
+        AnimY = -100,
+    }
+    table.insert(self.Notifications, notif)
+    tweenObject(notif, "AnimY", 50, 0.3, Enum.EasingStyle.Bounce)
+end
+
+local function drawNotifications()
+    local y = 50
+    for i, n in ipairs(Zenith.Notifications) do
+        local alpha = 1 - (tick() - n.StartTime) / n.Duration
+        if alpha <= 0 then table.remove(Zenith.Notifications, i) break end
+        local bgColor = (n.Type == "error") and Zenith.Theme.Error or (n.Type == "success") and Zenith.Theme.Success or Zenith.Theme.Accent
+        local yPos = n.Y + (n.AnimY - n.Y) * (1 - alpha) -- smooth slide
+        drawRoundedRect(10, yPos, 260, 50, 8, bgColor, 1 - alpha)
+        local title = createText(n.Title, Zenith.Theme.Text, Vector2.new(20, yPos + 6), 12)
+        title.Transparency = 1 - alpha
+        title:Draw()
+        title:Remove()
+        local msg = createText(n.Message, Zenith.Theme.TextDim, Vector2.new(20, yPos + 24), 11)
+        msg.Transparency = 1 - alpha
+        msg:Draw()
+        msg:Remove()
+        y = y + 60
+    end
+end
+
+-- ========================= TOOLTIP =========================
+function Zenith:ShowTooltip(text, x, y)
+    if self.Tooltip then self.Tooltip:Remove() end
+    self.Tooltip = createText(text, Zenith.Theme.Text, Vector2.new(x + 10, y + 10), 12)
+    self.Tooltip.Outline = true
+    self.Tooltip.OutlineColor = Color3.fromRGB(0,0,0)
+    self.TooltipTimer = tick()
+end
+
+-- ========================= INPUT HANDLING =========================
+function Zenith:Update(dt)
+    local mx, my = UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y
+    local clicked = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    local anyHover = false
+    self.HoveredElement = nil
+
+    -- Update windows
+    for _, win in ipairs(self.Windows) do
+        if win.Visible then
+            win:RefreshLayout()
+            -- Title bar drag
+            local inTitle = mx > win.X and mx < win.X + win.Width and my > win.Y and my < win.Y + win.TitleHeight
+            if inTitle and clicked and not win.Dragging then
+                win.Dragging = true
+                self.ActiveWindow = win
+                self.DragOffset = Vector2.new(mx - win.X, my - win.Y)
+            end
+            if win.Dragging and not clicked then win.Dragging = false end
+            if win.Dragging then
+                win.X = mx - self.DragOffset.X
+                win.Y = my - self.DragOffset.Y
+            end
+            -- Resize edges (bottom-right)
+            if win.Resizable then
+                local inResize = mx > win.X + win.Width - 10 and my > win.Y + win.Height - 10
+                if inResize and clicked and not win.Resizing then
+                    win.Resizing = true
+                end
+                if win.Resizing and not clicked then win.Resizing = false end
+                if win.Resizing then
+                    win.Width = math.max(win.MinWidth, mx - win.X)
+                    win.Height = math.max(win.MinHeight, my - win.Y)
+                end
+            end
+            -- Tabs
+            local tabX = win.X + 10
+            for i, tab in ipairs(win.Tabs) do
+                if mx > tabX and mx < tabX + 80 and my > win.Y + win.TitleHeight and my < win.Y + win.TitleHeight + win.TabHeight then
+                    anyHover = true
+                    if clicked then
+                        win.ActiveTab = tab
+                        win.ScrollOffset = 0
+                        win:RefreshLayout()
+                    end
+                end
+                tabX = tabX + 85
+            end
+            -- Elements
+            for _, elem in ipairs(win.Elements) do
+                if mx > elem.X and mx < elem.X + elem.Width and my > elem.Y and my < elem.Y + elem.Height then
+                    anyHover = true
+                    self.HoveredElement = elem
+                    elem.Hover = true
+                    if clicked then
+                        if elem.Type == "Button" then
+                            elem.Callback()
+                            tweenObject(elem, "AnimProgress", 0.2, 0.1)
+                        elseif elem.Type == "Checkbox" then
+                            elem.Value = not elem.Value
+                            elem.Callback(elem.Value)
+                        elseif elem.Type == "Slider" then
+                            elem.Dragging = true
+                        elseif elem.Type == "Dropdown" then
+                            elem.Expanded = not elem.Expanded
+                            tweenObject(elem, "AnimHeight", elem.Expanded and 1 or 0, 0.15)
+                        elseif elem.Type == "TextInput" then
+                            elem.Focused = true
+                        elseif elem.Type == "Keybind" then
+                            elem.Waiting = true
+                        elseif elem.Type == "ColorPicker" then
+                            elem.Open = not elem.Open
+                        end
+                    end
+                    if elem.Type == "Slider" and elem.Dragging then
+                        local barX = elem.X + elem.Width - 120
+                        local t = clamp((mx - barX) / 100, 0, 1)
+                        local newVal = elem.Min + t * (elem.Max - elem.Min)
+                        if elem.Decimals == 0 then newVal = math.floor(newVal) end
+                        elem.Value = newVal
+                        elem.Callback(elem.Value)
+                    end
+                else
+                    elem.Hover = false
+                    if elem.Type == "Slider" then elem.Dragging = false end
+                end
+            end
+            -- Scrolling
+            local scrollDelta = UserInputService:GetMouseDelta().Y
+            if my > win.Y + win.TitleHeight + win.TabHeight and my < win.Y + win.Height then
+                win.ScrollOffset = clamp(win.ScrollOffset - scrollDelta * 0.5, 0, math.max(0, win.ContentHeight - (win.Height - win.TitleHeight - win.TabHeight)))
+            end
+        end
+    end
+
+    -- Handle keybind waiting
+    if self.HoveredElement and self.HoveredElement.Type == "Keybind" and self.HoveredElement.Waiting then
+        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if self.HoveredElement and self.HoveredElement.Waiting then
+                local key = input.KeyCode.Name
+                if key == "Unknown" then key = input.UserInputType.Name end
+                self.HoveredElement.Key = key
+                self.HoveredElement.Waiting = false
+                self.HoveredElement.Callback(key)
+            end
+        end):Disconnect() -- one-shot
+    end
+
+    -- Tooltip
+    if self.Tooltip and tick() - self.TooltipTimer > 2 then
+        self.Tooltip:Remove()
+        self.Tooltip = nil
+    end
+    if self.HoveredElement and not self.Tooltip then
+        local tip = (self.HoveredElement.Type == "Button" and "Click to execute") or
+                    (self.HoveredElement.Type == "Slider" and "Drag to adjust") or
+                    (self.HoveredElement.Type == "Dropdown" and "Click to expand") or
+                    nil
+        if tip then self:ShowTooltip(tip, mx, my) end
+    end
+end
+
+-- ========================= MAIN DRAW =========================
+function Zenith:Draw()
+    for _, win in ipairs(self.Windows) do
+        if win.Visible then
+            drawShadow(win.X, win.Y, win.Width, win.Height)
+            drawRoundedRect(win.X, win.Y, win.Width, win.Height, 10, Zenith.Theme.Surface)
+            -- Title bar
+            drawRoundedRect(win.X, win.Y, win.Width, win.TitleHeight, 10, Zenith.Theme.Background)
+            local title = createText(win.Title, Zenith.Theme.Text, Vector2.new(win.X + 10, win.Y + 6), 16)
+            title:Draw()
+            title:Remove()
+            -- Tabs
+            local tabX = win.X + 10
+            for i, tab in ipairs(win.Tabs) do
+                local active = (tab == win.ActiveTab)
+                local tabColor = active and Zenith.Theme.Accent or Zenith.Theme.Element
+                drawRoundedRect(tabX, win.Y + win.TitleHeight, 80, win.TabHeight, 6, tabColor)
+                local tabText = createText(tab.Name, active and Zenith.Theme.Text or Zenith.Theme.TextDim, Vector2.new(tabX + 5, win.Y + win.TitleHeight + 6), 12)
+                tabText:Draw()
+                tabText:Remove()
+                tabX = tabX + 85
+            end
+            -- Elements (clipped)
+            local clipRegion = {
+                X = win.X, Y = win.Y + win.TitleHeight + win.TabHeight,
+                Width = win.Width, Height = win.Height - win.TitleHeight - win.TabHeight
+            }
+            -- Simulate clipping by checking Y bounds (draw only visible)
+            for _, elem in ipairs(win.Elements) do
+                if elem.Y + elem.Height > clipRegion.Y and elem.Y < clipRegion.Y + clipRegion.Height then
+                    if elem.Type == "Button" then drawButton(elem, RunService.RenderStepTime) end
+                    if elem.Type == "Checkbox" then drawCheckbox(elem, RunService.RenderStepTime) end
+                    if elem.Type == "Slider" then drawSlider(elem, RunService.RenderStepTime) end
+                    if elem.Type == "Dropdown" then drawDropdown(elem, RunService.RenderStepTime) end
+                    if elem.Type == "TextInput" then drawTextInput(elem, RunService.RenderStepTime) end
+                    if elem.Type == "Keybind" then drawKeybind(elem, RunService.RenderStepTime) end
+                    if elem.Type == "ColorPicker" then drawColorPicker(elem, RunService.RenderStepTime) end
+                end
+            end
+        end
+    end
+    drawNotifications()
+end
+
+-- ========================= EXAMPLE DEMO (run this script alone) =========================
+local function startDemo()
+    local ui = Zenith
+    local mainWin = ui:CreateWindow("Zenith UI - Demo", 200, 150, 420, 500)
+    local general = mainWin:AddTab("General")
+    local visuals = mainWin:AddTab("Visuals")
+    local misc = mainWin:AddTab("Misc")
+
+    mainWin:AddElement(general, ElementTypes.Button("Click Me", function() ui:Notify("Button", "You clicked the button!", 2, "success") end))
+    mainWin:AddElement(general, ElementTypes.Checkbox("Enable Feature", true, function(v) print("Checkbox:", v) end))
+    mainWin:AddElement(general, ElementTypes.Slider("Volume", 0, 100, 50, function(v) print("Volume:", v) end, 0))
+    mainWin:AddElement(general, ElementTypes.Dropdown("Mode", {"Aimbot", "Triggerbot", "ESP"}, 1, function(v) print("Mode:", v) end))
+    mainWin:AddElement(general, ElementTypes.TextInput("Username", "Enter name", function(v) print("Name:", v) end))
+    mainWin:AddElement(general, ElementTypes.Keybind("Open Menu", "RightControl", function(k) print("Keybind:", k) end))
+    mainWin:AddElement(general, ElementTypes.ColorPicker("Accent Color", ui.Theme.Accent, function(c) ui.Theme.Accent = c end))
+
+    -- Run loop
+    local heartbeat
+    heartbeat = RunService.RenderStepped:Connect(function(dt)
+        ui:Update(dt)
+        ui:Draw()
+    end)
+    return heartbeat
+end
+
+if game:GetService("RunService"):IsStudio() then
+    -- In Roblox Studio, demo runs automatically
+    startDemo()
+end
+
+return Zenith
