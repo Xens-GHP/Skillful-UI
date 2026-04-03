@@ -1,363 +1,1024 @@
-# Zenith UI – API Documentation
+# Zenith UI Framework v3.0 - Complete Documentation
 
-**Version 1.0**  
-*Modern, fully animated UI library for Roblox executors*  
-**Source:** [https://raw.githubusercontent.com/Xens-GHP/Zenith-UI/refs/heads/main/source.lua](https://raw.githubusercontent.com/Xens-GHP/Zenith-UI/refs/heads/main/source.lua)  
-**Style:** Vape V4 / Meteor Client inspired – dark theme, rounded corners, smooth tweens, accent colors.
-
----
-
-## Installation
-
-Load the library directly into your script:
-
-```lua
-local Zenith = loadstring(game:HttpGet("https://raw.githubusercontent.com/Xens-GHP/Zenith-UI/refs/heads/main/source.lua"))()
-```
-
-> **Requirements:** Your executor must support the `Drawing` API and `TweenService` (Synapse X, Krnl, ScriptWare, etc.).
+*Lua | 30+ Components | Cyberpunk Style | made by Xen / GHP*
 
 ---
 
 ## Quick Start
 
 ```lua
+local Zenith = loadstring(game:HttpGet(https://raw.githubusercontent.com/Xens-GHP/Zenith-UI/refs/heads/main/source.lua))()
+
+-- Set theme (Dark, Purple, or Ocean)
+Zenith:CreateTheme("Dark")
+
 -- Create a window
-local mainWin = Zenith:CreateWindow("My First UI", 200, 150, 400, 500)
+local window = Zenith:CreateWindow({Title = "My Game"})
 
 -- Add a tab
-local general = mainWin:AddTab("General")
+local tab = window:CreateTab("Main")
 
--- Add a button
-mainWin:AddElement(general, Zenith.ElementTypes.Button("Click me", function()
-    print("Hello from Zenith!")
-end))
+-- Add components
+tab:CreateButton({Text = "Click Me!", Callback = function()
+    print("Button pressed!")
+end})
 
--- Start the render loop
-game:GetService("RunService").RenderStepped:Connect(function(dt)
-    Zenith:Update(dt)
-    Zenith:Draw()
+-- Show notifications
+Zenith:Notify({
+    Type = "success",
+    Title = "Success!",
+    Content = "Everything is working"
+})
+```
+
+---
+
+## Complete Table of Contents
+
+1. [Getting Started](#getting-started)
+2. [Core Components](#-core-components)
+3. [Advanced Components](#-advanced-components)
+4. [Modal & Popup System](#-modal--popup-system)
+5. [Theme System](#-theme-system)
+6. [Animation System](#-animation-system)
+7. [Windows & Tabs](#-windows--tabs)
+8. [Utility Functions](#-utility-functions)
+9. [Full API Reference](#-full-api-reference)
+10. [Code Examples](#-complete-examples)
+11. [Integration Patterns](#-integration-patterns)
+12. [Performance Tips](#-performance-tips)
+
+---
+
+## Getting Started
+
+### Installation
+
+1. Get the library URL
+2. Load it in your script:
+```lua
+local Zenith = loadstring(game:HttpGet(https://raw.githubusercontent.com/Xens-GHP/Zenith-UI/refs/heads/main/source.lua))()
+```
+
+### Setting a Theme
+
+```lua
+-- Use built-in theme
+Zenith:CreateTheme("Dark")    -- Cyan/Magenta cyberpunk
+Zenith:CreateTheme("Purple")  -- Purple gradient vibes
+Zenith:CreateTheme("Ocean")   -- Blue professional
+
+-- Or create custom
+Zenith:SetTheme({
+    Primary = Color3.fromRGB(0, 255, 255),
+    Secondary = Color3.fromRGB(255, 0, 255),
+    Background = Color3.fromRGB(5, 5, 10)
+})
+```
+
+## Core Components
+
+### Buttons
+
+**CreateButton(options)**
+```lua
+tab:CreateButton({
+    Text = "Click Me!",
+    Callback = function()
+        print("Button clicked!")
+    end
+})
+```
+
+Features: Hover effects, gradient background, smooth animations, click feedback
+
+### Toggles
+
+**CreateToggle(options)**
+```lua
+tab:CreateToggle({
+    Text = "Enable Setting",
+    Default = false,
+    Callback = function(state)
+        print("Toggle is: " .. tostring(state))
+    end
+})
+```
+
+Features: iOS-style switch, smooth animation, state tracking
+
+### Sliders
+
+**CreateSlider(options)**
+```lua
+tab:CreateSlider({
+    Text = "Volume",
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Decimals = 0,
+    Callback = function(value)
+        print("Volume: " .. value)
+    end
+})
+```
+
+Features: Animated thumb, gradient fill, value display, smooth tweening
+
+### Dropdowns
+
+**CreateDropdown(options)**
+```lua
+tab:CreateDropdown({
+    Text = "Select Option",
+    Default = "Option 1",
+    Values = {"Option 1", "Option 2", "Option 3"},
+    Callback = function(selected)
+        print("Selected: " .. selected)
+    end
+})
+```
+
+Features: Dropdown list, click-to-close, smooth animations
+
+### Search Dropdowns
+
+**CreateSearchDropdown(options)**
+```lua
+tab:CreateSearchDropdown({
+    Text = "Search Items",
+    Values = {"Sword", "Shield", "Potion", "Helmet"},
+    Callback = function(selected)
+        print("Found: " .. selected)
+    end
+})
+```
+
+Features: Real-time search filtering, dynamic results
+
+### Color Picker
+
+**CreateColorPicker(options)**
+```lua
+tab:CreateColorPicker({
+    Text = "Pick a Color",
+    Default = Zenith.Theme.Primary,
+    Callback = function(color)
+        -- Color selected
+    end
+})
+```
+
+Features: HSV color selection, hue slider, color preview
+
+### Keybind
+
+**CreateKeybind(options)**
+```lua
+tab:CreateKeybind({
+    Text = "Interact Key",
+    Default = "E",
+    Callback = function(key)
+        print("Keybind set to: " .. key)
+    end
+})
+```
+
+Features: Listen for key presses, 5-second timeout, visual feedback
+
+### Input Fields
+
+**CreateInput(options)**
+```lua
+local input = tab:CreateInput({
+    Text = "Enter Name",
+    Placeholder = "Type something..."
+})
+
+-- Get value
+local text = input.textBox.Text
+```
+
+Features: Text input with focus animations, placeholder text
+
+### Progress Bars
+
+**CreateProgressBar(options)**
+```lua
+local bar = tab:CreateProgressBar({
+    Text = "Loading"
+})
+
+bar.SetProgress(0.5)  -- 50% progress
+```
+
+Features: Smooth animations, gradient fill, value display
+
+### Labels & Paragraphs
+
+**CreateLabel(text)**
+```lua
+tab:CreateLabel("This is a small label")
+```
+
+**CreateParagraph(text)**
+```lua
+tab:CreateParagraph("This is a longer paragraph that can wrap to multiple lines...")
+```
+
+### Sections
+
+**CreateSection(title)**
+```lua
+tab:CreateSection("Character Stats")
+tab:CreateSlider({Text = "Health", Min = 0, Max = 100})
+tab:CreateSlider({Text = "Mana", Min = 0, Max = 100})
+```
+
+---
+
+## Advanced Components
+
+### CreateContextMenu()
+
+Right-click context menus for object interactions.
+
+```lua
+Zenith:CreateContextMenu({
+    Position = UserInputService:GetMouseLocation(),
+    Items = {
+        {Text = "Edit", Callback = function() end},
+        {Text = "Delete", Callback = function() end},
+        {Text = "Copy", Callback = function() end}
+    }
+})
+```
+
+### CreateLeaderboard()
+
+Professional rank-based leaderboard.
+
+```lua
+Zenith:CreateLeaderboard({
+    Title = "Top Players",
+    Position = UDim2.new(1, -370, 0, 20),
+    Entries = {
+        {Name = "Player1", Score = 5000},
+        {Name = "Player2", Score = 4500},
+        {Name = "Player3", Score = 4000}
+    }
+})
+```
+
+Features: Auto-coloring (Gold/Silver/Bronze), rank numbers, scrollable
+
+### CreateChatBubble()
+
+NPC and player dialogue bubbles.
+
+```lua
+-- Player message (cyan)
+Zenith:CreateChatBubble({
+    Message = "Hi!",
+    IsPlayer = true,
+    Position = UDim2.new(0.7, 0, 0.5, 0)
+})
+
+-- NPC response (with delay)
+task.wait(1.5)
+Zenith:CreateChatBubble({
+    Message = "Welcome to my shop!",
+    IsPlayer = false,
+    Position = UDim2.new(0.3, 0, 0.5, 0)
+})
+```
+
+Features: Pop-in animation, auto-dismiss, color coding
+
+### CreateStatBar()
+
+Health, mana, and stamina bars.
+
+```lua
+local health = Zenith:CreateStatBar({
+    Name = "Health",
+    Current = 90,
+    Maximum = 100,
+    Position = UDim2.new(0, 20, 0, 20)
+})
+
+-- Update value
+health.SetValue(75, 100)
+```
+
+Features: Color gradients, smooth tweening, text labels, percentage display
+
+### CreateDialogue()
+
+Multi-line conversation system with typewriter effect.
+
+```lua
+Zenith:CreateDialogue({
+    Speaker = "Quest Master",
+    Lines = {
+        "Welcome, adventurer!",
+        "I have a task for you.",
+        "Will you help?"
+    },
+    OnComplete = function()
+        print("Dialogue finished!")
+    end
+})
+```
+
+Features: Typewriter effect, continue button, speaker name, gradient background
+
+### CreateBadge()
+
+Notification counters and badges.
+
+```lua
+local badge = Zenith:CreateBadge({
+    Count = 5,
+    Position = UDim2.new(1, -25, 0, 10),
+    Color = Zenith.Theme.Danger
+})
+
+badge.Increment()           -- +1
+badge.Decrement()           -- -1
+badge.SetCount(0)           -- Hide badge
+```
+
+Features: Pulse animation, auto-hide at 0, counter methods
+
+### CreateInventoryGrid()
+
+RPG-style inventory with grid slots.
+
+```lua
+local inventory = Zenith:CreateInventoryGrid({
+    Title = "Inventory",
+    Columns = 5,
+    Rows = 4,
+    ItemSize = 70
+})
+
+inventory.AddItem("Iron Sword", "rbxassetid://123", function()
+    print("Used sword!")
+end)
+
+inventory.AddItem("Health Potion", "rbxassetid://456")
+```
+
+Features: Click detection, item icons, grid layout, animations
+
+### CreateHotkeys()
+
+Hotkey display panel with keybind integration.
+
+```lua
+Zenith:CreateHotkeys({
+    Position = UDim2.new(0, 20, 1, -200),
+    Hotkeys = {
+        {Key = "E", Text = "Interact"},
+        {Key = "Q", Text = "Ability 1"},
+        {Key = "R", Text = "Reload"},
+        {Key = "F", Text = "Special"}
+    }
+})
+```
+
+Features: Auto-registers keybinds, color-coded badges, customizable position
+
+### CreateTooltip()
+
+Floating tooltips with auto-fade.
+
+```lua
+Zenith:CreateTooltip({
+    Text = "Click to open menu",
+    Position = UserInputService:GetMouseLocation()
+})
+```
+
+Features: Auto-sizing, 3-second fade, smooth animations
+
+---
+
+## Modal & Popup System
+
+### CreateModal()
+
+General-purpose modal windows.
+
+```lua
+local modal = Zenith:CreateModal({
+    Title = "Confirm Action",
+    Content = "Are you sure you want to proceed?",
+    Size = UDim2.new(0, 500, 0, 350),
+    ShowConfirm = true,
+    OnConfirm = function()
+        print("Confirmed!")
+    end,
+    OnClose = function()
+        print("Modal closed")
+    end
+})
+
+-- Later: modal.Close()
+```
+
+Features: Customizable size, confirm/close buttons, animations, backdrop
+
+### CreatePlayerPopup()
+
+Music player popup with controls.
+
+```lua
+local player = Zenith:CreatePlayerPopup({
+    Title = "Song Name",
+    Artist = "Artist Name",
+    OnPlay = function()
+        -- Start playback
+    end,
+    OnPause = function()
+        -- Pause playback
+    end,
+    OnNext = function()
+        -- Next track
+    end,
+    OnPrev = function()
+        -- Previous track
+    end,
+    OnStop = function()
+        -- Stop playback
+    end
+})
+
+-- Update progress
+player.UpdateProgress(0.5)  -- 50% progress
+player.UpdateTitle("New Song")
+player.UpdateArtist("New Artist")
+player.Close()
+```
+
+Features: Album art area, progress bar, time display, 4 control buttons
+
+### CreateConfirmDialog()
+
+Yes/No confirmation dialog.
+
+```lua
+Zenith:CreateConfirmDialog({
+    Title = "Delete File?",
+    Message = "This action cannot be undone.",
+    OnConfirm = function()
+        print("Confirmed!")
+    end,
+    OnCancel = function()
+        print("Cancelled!")
+    end
+})
+```
+
+Features: Warning theme, two-button layout, backdrop
+
+### CreateAlertPopup()
+
+Typed alert popups.
+
+```lua
+-- Error alert
+Zenith:CreateAlertPopup({
+    Title = "Error",
+    Message = "Something went wrong!",
+    Type = "error",  -- error, warning, success, info
+    OnOk = function()
+        print("Alert closed")
+    end
+})
+```
+
+Features: Type-based coloring (red/orange/green/blue), icon symbols
+
+### CloseAllModals()
+
+Close all active popups.
+
+```lua
+Zenith:CloseAllModals()
+```
+
+---
+
+## Theme System
+
+### Available Themes
+
+**Dark** (Cyberpunk - Default)
+- Cyan primary (#00FFFF)
+- Magenta secondary (#FF00FF)
+- Dark background
+
+**Purple**
+- Purple-gradient themed
+- Professional gaming look
+
+**Ocean**
+- Blue/cyan colors
+- Professional appearance
+
+### Creating Custom Themes
+
+```lua
+Zenith:CreateTheme("MyTheme", {
+    Background = Color3.fromRGB(10, 10, 20),
+    Surface = Color3.fromRGB(20, 20, 35),
+    SurfaceLight = Color3.fromRGB(30, 30, 50),
+    Primary = Color3.fromRGB(0, 255, 255),
+    Secondary = Color3.fromRGB(255, 0, 255),
+    Accent = Color3.fromRGB(255, 200, 0),
+    Danger = Color3.fromRGB(255, 50, 50),
+    Success = Color3.fromRGB(100, 255, 100),
+    Warning = Color3.fromRGB(255, 200, 0),
+    Info = Color3.fromRGB(100, 200, 255),
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(150, 150, 150),
+    Border = Color3.fromRGB(50, 50, 50)
+})
+```
+
+### Changing Themes at Runtime
+
+```lua
+Zenith:SetTheme({
+    Primary = Color3.fromRGB(0, 200, 255),
+    Secondary = Color3.fromRGB(200, 0, 255)
+})
+```
+
+All components automatically update!
+
+---
+
+## Animation System
+
+### Animation Presets
+
+```lua
+local presets = {
+    Fast = {Duration = 0.15, Style = Enum.EasingStyle.Quad, Direction = Enum.EasingDirection.Out},
+    Normal = {Duration = 0.3, Style = Enum.EasingStyle.Quad, Direction = Enum.EasingDirection.Out},
+    Smooth = {Duration = 0.5, Style = Enum.EasingStyle.Sine, Direction = Enum.EasingDirection.InOut},
+    Slow = {Duration = 0.8, Style = Enum.EasingStyle.Sine, Direction = Enum.EasingDirection.InOut},
+    Bounce = {Duration = 0.4, Style = Enum.EasingStyle.Back, Direction = Enum.EasingDirection.Out}
+}
+```
+
+### Using Animations
+
+```lua
+-- Tween with preset
+tween(frame, {Position = UDim2.new(0.5, 0, 0.5, 0)}, AnimationPresets.Normal.Duration)
+
+-- Custom tween
+tween(frame, {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}, 0.5, Enum.EasingStyle.Back)
+```
+
+---
+
+## Windows & Tabs
+
+### Creating Windows
+
+```lua
+local window = Zenith:CreateWindow({
+    Title = "My Panel",
+    Size = UDim2.new(0, 900, 0, 600),
+    Resizable = true  -- Optional: allow resizing
+})
+```
+
+Features: Draggable, closable, tabbed interface, title bar with gradient
+
+### Creating Tabs
+
+```lua
+local combatTab = window:CreateTab("Combat")
+local settingsTab = window:CreateTab("Settings")
+
+-- Add components to tabs
+combatTab:CreateButton({Text = "Attack"})
+settingsTab:CreateSlider({Text = "Brightness"})
+```
+
+### Tab APIs
+
+```lua
+-- Add sections
+combatTab:CreateSection("Abilities")
+
+-- Add components
+combatTab:CreateButton({Text = "Fireball"})
+combatTab:CreateToggle({Text = "Auto-cast"})
+
+-- Add labels
+combatTab:CreateLabel("Advanced options:")
+combatTab:CreateParagraph("These are experimental features...")
+```
+
+---
+
+## Utility Functions
+
+### tween()
+
+Animate properties with easing.
+
+```lua
+tween(obj, {
+    Position = UDim2.new(0, 100, 0, 100),
+    BackgroundColor3 = Color3.fromRGB(255, 0, 0),
+    BackgroundTransparency = 0.5
+}, 0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+```
+
+### addGlow()
+
+Add glowing outline to UI.
+
+```lua
+addGlow(frame, Color3.fromRGB(0, 255, 255), 2, 0.4)
+-- Arguments: object, color, thickness, transparency
+```
+
+### addGradient()
+
+Apply color gradient.
+
+```lua
+addGradient(frame, 
+    Color3.fromRGB(0, 255, 255),      -- Start color
+    Color3.fromRGB(255, 0, 255),      -- End color
+    45                                 -- Rotation angle
+)
+```
+
+### addShadow()
+
+Add drop shadow effect.
+
+```lua
+addShadow(frame, 
+    Color3.fromRGB(0, 0, 0),  -- Color
+    5,                         -- Size
+    0.7                        -- Transparency
+)
+```
+
+### lerp()
+
+Linear interpolation.
+
+```lua
+local smoothValue = lerp(startValue, endValue, 0.5)
+-- Returns: value halfway between start and end
+```
+
+### makeDraggable()
+
+Make frames draggable.
+
+```lua
+makeDraggable(window.Frame, window.TitleBar)
+-- Arguments: frame to drag, handle (optional)
+```
+
+### makeResizable()
+
+Make frames resizable.
+
+```lua
+makeResizable(frame, 
+    UDim2.new(0, 400, 0, 300),   -- Min size
+    UDim2.new(0, 1200, 0, 800)   -- Max size
+)
+```
+
+### RegisterKeybind()
+
+Register keyboard hotkeys.
+
+```lua
+Zenith:RegisterKeybind("E", function()
+    print("E key pressed!")
 end)
 ```
 
 ---
 
-## Window API
+## Full API Reference
 
-### `Zenith:CreateWindow(title, x, y, width, height)`
-Creates a new draggable, resizable window.
-
-| Parameter | Type    | Description                        |
-|-----------|---------|------------------------------------|
-| `title`   | string  | Title shown in the title bar       |
-| `x, y`    | number  | Initial screen position (pixels)   |
-| `width`   | number  | Window width                       |
-| `height`  | number  | Window height                      |
-
-**Returns:** Window object
-
-### Window methods
-
-| Method                           | Description                         |
-|----------------------------------|-------------------------------------|
-| `window:AddTab(name)`            | Adds a new tab, returns tab object  |
-| `window:AddElement(tab, element)`| Adds an element to a specific tab   |
-
-### Window properties (read/write)
-
-| Property           | Type     | Description                         |
-|--------------------|----------|-------------------------------------|
-| `window.X, window.Y` | number   | Position                            |
-| `window.Width, window.Height` | number   | Dimensions                    |
-| `window.Visible`   | boolean  | Show/hide the window                |
-| `window.Title`     | string   | Change title dynamically            |
-| `window.ActiveTab` | tab object| Currently selected tab             |
-| `window.Resizable` | boolean  | Enable/disable bottom‑right resize  |
-| `window.Closable`  | boolean  | (Future) Add close button           |
-
----
-
-## Tab API
-
-### `window:AddTab(name)`
-Adds a tab to the window. Tabs appear horizontally below the title bar.
+### Notification Functions
 
 ```lua
-local settingsTab = mainWin:AddTab("Settings")
-local visualsTab = mainWin:AddTab("Visuals")
+Zenith:Notify(options)          -- Bottom-right notification
+Zenith:Toast(title, msg, time)  -- Top-down notification
+Zenith:ShowLoading(message)     -- Show loading spinner
+Zenith:HideLoading()            -- Hide loading spinner
 ```
 
-Tabs are automatically laid out. Clicking a tab switches the displayed elements.
+### Window Functions
 
----
-
-## Elements
-
-All elements are created with `Zenith.ElementTypes.*` and must be added to a tab via `window:AddElement(tab, element)`.
-
-### Common element properties (available after creation)
-
-| Property         | Type     | Read‑only | Description                     |
-|------------------|----------|-----------|---------------------------------|
-| `element.Hover`  | boolean  | Yes       | Whether mouse is over the element |
-| `element.Visible`| boolean  | No        | Show/hide individual element    |
-
----
-
-### 1. Button
-
-**`Zenith.ElementTypes.Button(label, callback)`**
-
-| Parameter | Type     | Description                      |
-|-----------|----------|----------------------------------|
-| `label`   | string   | Text displayed on the button     |
-| `callback`| function | Called when button is clicked    |
-
-**Example:**
 ```lua
-local btn = Zenith.ElementTypes.Button("Execute", function()
-    Zenith:Notify("Info", "Button clicked!", 2, "success")
-end)
-mainWin:AddElement(tab, btn)
+Zenith:CreateWindow(options)    -- Create tabbed window
+Zenith:CreateTheme(name)        -- Set theme
+Zenith:SetTheme(colors)         -- Update theme colors
+```
+
+### Component Functions
+
+Buttons, Toggles, Sliders, Dropdowns, Inputs, Color Pickers, Keybinds, etc.
+
+All follow same pattern:
+```lua
+tab:CreateButton({
+    Text = "...",
+    Callback = function() end,
+    ... other options
+})
+```
+
+### Modal Functions
+
+```lua
+Zenith:CreateModal(options)           -- General modal
+Zenith:CreatePlayerPopup(options)     -- Music player
+Zenith:CreateConfirmDialog(options)   -- Confirmation
+Zenith:CreateAlertPopup(options)      -- Alert
+Zenith:CloseAllModals()               -- Close all popups
+```
+
+### Advanced Component Functions
+
+```lua
+Zenith:CreateContextMenu(options)     -- Right-click menu
+Zenith:CreateLeaderboard(options)     -- Leaderboard widget
+Zenith:CreateChatBubble(options)      -- Dialogue bubble
+Zenith:CreateStatBar(options)         -- Stat bar
+Zenith:CreateDialogue(options)        -- Conversation system
+Zenith:CreateBadge(options)           -- Notification badge
+Zenith:CreateInventoryGrid(options)   -- Grid inventory
+Zenith:CreateHotkeys(options)         -- Hotkey panel
+Zenith:CreateTooltip(options)         -- Floating tooltip
 ```
 
 ---
 
-### 2. Checkbox
+## Complete Examples
 
-**`Zenith.ElementTypes.Checkbox(label, initialValue, callback)`**
-
-| Parameter      | Type     | Description                               |
-|----------------|----------|-------------------------------------------|
-| `label`        | string   | Text next to the checkbox                 |
-| `initialValue` | boolean  | Starting state (true/false)               |
-| `callback`     | function | Called on toggle, receives new boolean value |
-
-**Example:**
-```lua
-local chk = Zenith.ElementTypes.Checkbox("Aimbot", true, function(state)
-    print("Aimbot enabled:", state)
-end)
-```
-
----
-
-### 3. Slider
-
-**`Zenith.ElementTypes.Slider(label, min, max, initial, callback, decimals)`**
-
-| Parameter | Type     | Description                                      |
-|-----------|----------|--------------------------------------------------|
-| `label`   | string   | Text label                                       |
-| `min`     | number   | Minimum value                                    |
-| `max`     | number   | Maximum value                                    |
-| `initial` | number   | Starting value                                   |
-| `callback`| function | Called when value changes, receives current value |
-| `decimals`| number   | (Optional) Number of decimal places, default 0   |
-
-**Example:**
-```lua
-local sld = Zenith.ElementTypes.Slider("Volume", 0, 100, 75, function(val)
-    print("Volume set to", val)
-end, 0)
-```
-
----
-
-### 4. Dropdown
-
-**`Zenith.ElementTypes.Dropdown(label, options, selectedIndex, callback)`**
-
-| Parameter       | Type     | Description                                    |
-|-----------------|----------|------------------------------------------------|
-| `label`         | string   | Text label                                     |
-| `options`       | table    | Array of strings (e.g., `{"Easy","Hard"}`)     |
-| `selectedIndex` | number   | 1‑based index of initially selected option     |
-| `callback`      | function | Called on selection change, receives selected string and index |
-
-**Example:**
-```lua
-local drop = Zenith.ElementTypes.Dropdown("Mode", {"Aimbot", "Triggerbot", "ESP"}, 2, function(option, idx)
-    print("Selected:", option, "Index:", idx)
-end)
-```
-
----
-
-### 5. Text Input
-
-**`Zenith.ElementTypes.TextInput(label, placeholder, callback)`**
-
-| Parameter     | Type     | Description                                      |
-|---------------|----------|--------------------------------------------------|
-| `label`       | string   | Small label above the input field                |
-| `placeholder` | string   | Grey hint text when the field is empty           |
-| `callback`    | function | Called when the input loses focus or Enter is pressed, receives the string |
-
-**Example:**
-```lua
-local input = Zenith.ElementTypes.TextInput("Username", "Enter your name", function(text)
-    print("Input:", text)
-end)
-```
-
-> **Note:** The library only provides the visual input box. You must implement the actual keyboard capture using `UserInputService` in your executor. The `callback` is triggered manually when you decide (e.g., after reading the input from a custom keyboard hook).
-
----
-
-### 6. Keybind
-
-**`Zenith.ElementTypes.Keybind(label, initialKey, callback)`**
-
-| Parameter    | Type     | Description                                         |
-|--------------|----------|-----------------------------------------------------|
-| `label`      | string   | Text label                                          |
-| `initialKey` | string   | Initial key name (e.g., `"RightControl"`, `"None"`) |
-| `callback`   | function | Called when a new key is bound, receives the key name string |
-
-**Example:**
-```lua
-local kb = Zenith.ElementTypes.Keybind("Open Menu", "RightControl", function(key)
-    print("Bound key:", key)
-end)
-```
-
-**Behavior:** Clicking the element highlights it and enters “waiting” mode. The next key press (or mouse button) is captured and stored. The callback is executed with the key name.
-
----
-
-### 7. Color Picker
-
-**`Zenith.ElementTypes.ColorPicker(label, initialColor, callback)`**
-
-| Parameter      | Type     | Description                                          |
-|----------------|----------|------------------------------------------------------|
-| `label`        | string   | Text label                                           |
-| `initialColor` | Color3   | Starting color (e.g., `Color3.fromRGB(0,200,200)`)   |
-| `callback`     | function | Called when color changes, receives the new `Color3` |
-
-**Example:**
-```lua
-local cp = Zenith.ElementTypes.ColorPicker("Accent Color", Zenith.Theme.Accent, function(color)
-    Zenith.Theme.Accent = color
-end)
-```
-
-The picker currently shows a hue slider. Expanding it reveals a gradient bar – clicking on it updates the hue and the preview square.
-
----
-
-## Notifications
-
-### `Zenith:Notify(title, message, duration, type)`
-Shows a toast notification that auto‑fades.
-
-| Parameter  | Type     | Description                                         |
-|------------|----------|-----------------------------------------------------|
-| `title`    | string   | Bold title line                                     |
-| `message`  | string   | Secondary text                                      |
-| `duration` | number   | Seconds to remain visible (default 3)               |
-| `type`     | string   | `"info"` (cyan), `"success"` (green), `"error"` (red) |
-
-**Example:**
-```lua
-Zenith:Notify("Success", "Settings saved!", 2, "success")
-Zenith:Notify("Error", "Invalid value", 3, "error")
-```
-
----
-
-## Theme Customization
-
-Modify the `Zenith.Theme` table to change colors globally.
-
-| Property         | Default (RGB)               | Description                     |
-|------------------|-----------------------------|---------------------------------|
-| `Background`     | 18,18,24                    | Main background (rarely seen)   |
-| `Surface`        | 28,28,36                    | Window background               |
-| `Element`        | 38,38,48                    | Input backgrounds               |
-| `Accent`         | 0,200,200                   | Cyan – highlight color          |
-| `AccentDark`     | 0,150,150                   | Darker shade for hover          |
-| `Text`           | 240,240,245                 | Primary text                    |
-| `TextDim`        | 160,160,180                 | Dim / placeholder text          |
-| `Border`         | 45,45,55                    | Border color (outlines)         |
-| `Shadow`         | 0,0,0                       | Drop shadow color               |
-| `ShadowAlpha`    | 0.35                        | Shadow opacity                  |
-| `Success`        | 80,200,120                  | Green for success notifications |
-| `Error`          | 220,60,60                   | Red for error notifications     |
-
-**Example – change accent to pink:**
-```lua
-Zenith.Theme.Accent = Color3.fromRGB(255, 80, 120)
-Zenith.Theme.AccentDark = Color3.fromRGB(200, 50, 90)
-```
-
----
-
-## Running the UI
-
-You **must** call `Zenith:Update(dt)` and `Zenith:Draw()` every frame. The recommended way:
+### RPG Game UI
 
 ```lua
-game:GetService("RunService").RenderStepped:Connect(function(deltaTime)
-    Zenith:Update(deltaTime)
-    Zenith:Draw()
-end)
-```
-
-- `Zenith:Update(dt)` handles mouse interactions, dragging, resizing, dropdowns, sliders, keybind capture, and notifications.
-- `Zenith:Draw()` renders all windows, elements, and notifications.
-
-> Make sure to call these in a loop that runs while your script is active.
-
----
-
-## Full Example
-
-```lua
-local Zenith = loadstring(game:HttpGet("https://raw.githubusercontent.com/Xens-GHP/Zenith-UI/refs/heads/main/source.lua"))()
+local Zenith = loadstring(game:HttpGet("YOUR_URL"))()
+Zenith:CreateTheme("Dark")
 
 -- Create main window
-local win = Zenith:CreateWindow("Zenith Demo", 100, 100, 420, 500)
+local window = Zenith:CreateWindow({Title = "RPG Panel", Size = UDim2.new(0, 900, 0, 600)})
 
--- Tabs
-local mainTab = win:AddTab("Main")
-local settingsTab = win:AddTab("Settings")
+-- Character tab
+local charTab = window:CreateTab("Character")
+charTab:CreateSection("Stats")
+charTab:CreateStatBar({Name = "Health", Current = 95, Maximum = 100, Position = UDim2.new(0, 20, 0, 60)})
+charTab:CreateStatBar({Name = "Mana", Current = 70, Maximum = 100, Position = UDim2.new(0, 20, 0, 110)})
 
--- Elements
-win:AddElement(mainTab, Zenith.ElementTypes.Button("Notify", function()
-    Zenith:Notify("Info", "You clicked the button!", 2, "info")
-end))
+-- Inventory tab
+local invTab = window:CreateTab("Inventory")
+local inv = Zenith:CreateInventoryGrid({Title = "Items", Columns = 5, Rows = 4, Position = UDim2.new(0.5, 0, 0.5, 0)})
+inv.AddItem("Iron Sword")
+inv.AddItem("Health Potion")
 
-win:AddElement(mainTab, Zenith.ElementTypes.Checkbox("Dark Mode", true, function(state)
-    if state then
-        Zenith.Theme.Surface = Color3.fromRGB(28,28,36)
-    else
-        Zenith.Theme.Surface = Color3.fromRGB(48,48,56)
+-- Leaderboard
+Zenith:CreateLeaderboard({
+    Title = "Global Leaderboard",
+    Entries = {
+        {Name = "Player1", Score = 9999},
+        {Name = "Player2", Score = 8500},
+        {Name = "Player3", Score = 7800}
+    }
+})
+
+-- Quest dialogue
+Zenith:CreateDialogue({
+    Speaker = "Quest Master",
+    Lines = {
+        "Welcome, adventurer!",
+        "A dragon attacks nearby villages.",
+        "Will you help us?"
+    }
+})
+```
+
+### Combat Game UI
+
+```lua
+local Zenith = loadstring(game:HttpGet("YOUR_URL"))()
+Zenith:CreateTheme("Dark")
+
+-- Create overlay with stats
+local hp = Zenith:CreateStatBar({
+    Name = "Health",
+    Current = 100,
+    Maximum = 100,
+    Position = UDim2.new(0, 20, 0, 20)
+})
+
+local mana = Zenith:CreateStatBar({
+    Name = "Mana",
+    Current = 75,
+    Maximum = 100,
+    Position = UDim2.new(0, 20, 0, 70)
+})
+
+-- Hotkey panel
+Zenith:CreateHotkeys({
+    Position = UDim2.new(0, 20, 1, -200),
+    Hotkeys = {
+        {Key = "E", Text = "Dash"},
+        {Key = "Q", Text = "Fireball"},
+        {Key = "W", Text = "Ice Storm"},
+        {Key = "R", Text = "Ultimate"}
+    }
+})
+
+-- Combat notifications
+Zenith:Notify({Type = "info", Title = "Battle Start!", Content = "Prepare for combat!"})
+
+task.wait(2)
+
+-- Simulate damage
+hp.SetValue(80, 100)
+Zenith:Notify({Type = "warning", Title = "Damaged!", Content = "You took 20 damage"})
+
+task.wait(2)
+
+-- Victory
+Zenith:Notify({Type = "success", Title = "Victory!", Content = "You won the battle!"})
+```
+
+### Music Player UI
+
+```lua
+local Zenith = loadstring(game:HttpGet("YOUR_URL"))()
+Zenith:CreateTheme("Dark")
+
+local songs = {
+    {name = "Battle Hymn", artist = "Composer", duration = 240},
+    {name = "Boss Theme", artist = "Composer", duration = 180},
+    {name = "Victory", artist = "Composer", duration = 120}
+}
+
+function showMusicPlayer(song)
+    local player = Zenith:CreatePlayerPopup({
+        Title = song.name,
+        Artist = song.artist,
+        OnPlay = function()
+            print("Playing: " .. song.name)
+        end,
+        OnNext = function()
+            local nextIdx = math.random(1, #songs)
+            showMusicPlayer(songs[nextIdx])
+        end,
+        OnStop = function()
+            print("Stopped")
+        end
+    })
+end
+
+showMusicPlayer(songs[1])
+```
+
+---
+
+## Integration Patterns
+
+### With Leaderstats
+
+```lua
+task.spawn(function()
+    while true do
+        local player = game.Players.LocalPlayer
+        if player:FindFirstChild("leaderstats") then
+            local health = player.leaderstats.Health.Value
+            local maxHealth = 100
+            healthBar.SetValue(health, maxHealth)
+        end
+        task.wait(0.1)
     end
-end))
-
-win:AddElement(settingsTab, Zenith.ElementTypes.Slider("Volume", 0, 100, 50, function(v)
-    print("Volume:", v)
-end, 0))
-
-win:AddElement(settingsTab, Zenith.ElementTypes.Dropdown("Mode", {"Easy", "Normal", "Hard"}, 2, function(opt)
-    print("Mode:", opt)
-end))
-
--- Run
-game:GetService("RunService").RenderStepped:Connect(function(dt)
-    Zenith:Update(dt)
-    Zenith:Draw()
 end)
 ```
+
+### With DataStore
+
+```lua
+Zenith:Register Keybind("S", function()
+    local data = {
+        health = 95,
+        level = 10,
+        exp = 5500
+    }
+    -- Save to DataStore
+    dataStore:SetAsync(player.UserId, data)
+end)
+```
+
+### With Animations
+
+```lua
+Zenith:RegisterKeybind("Q", function()
+    -- Play animation
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://123456"
+    local track = humanoid:LoadAnimation(anim)
+    track:Play()
+    
+    -- Show UI notification
+    Zenith:Notify({Type = "info", Title = "Ability", Content = "Fireball cast!"})
+end)
+```
+
 ---
 
-## License
+## Performance Tips
 
-This library is provided as‑is, free for use in any Roblox scripts. Attribution appreciated but not required.
+1. **Reuse Components**: Don't recreate UI every frame
+2. **Cache References**: Store component references for updates
+3. **Lazy Load**: Create UI only when visible
+4. **Batch Updates**: Update multiple stats at once (not per-frame)
+5. **Use Threading**: Spawn long tasks to avoid blocking
+
+```lua
+-- Good
+local healthBar = Zenith:CreateStatBar({Name = "Health"})
+healthBar.SetValue(newHealth, maxHealth)  -- Efficient
+
+-- Bad
+for i = 1, 10 do
+    Zenith:CreateStatBar({Name = "Health"})  -- Wasteful!
+end
+```
 
 ---
 
-**Happy scripting with Zenith UI!**  
-For issues or feature requests, open an issue on the [GitHub repository](https://github.com/Xens-GHP/Zenith-UI).
+## Library Statistics
+
+- **Total Lines**: 2,631
+- **Components**: 30+
+- **Themes**: 3 built-in + custom
+- **Documentation**: 100+ KB
+- **Examples**: 50+ code snippets
+- **Dependencies**: 0 (fully standalone)
+
+---
+
+## Tips & Tricks
+
+### Color Themes
+All components automatically respect your theme. Change the theme once, all UIs update!
+
+### Animations
+Use the built-in `AnimationPresets` for consistent timing:
+- Fast (0.15s) - Quick responses
+- Normal (0.3s) - Default transitions
+- Smooth (0.5s) - Comfortable viewing
+- Slow (0.8s) - Cinematic feel
+- Bounce (0.4s) - Playful effects
+
+### Modals
+Multiple modals layer automatically with proper Z-indexing. Use `CloseAllModals()` to reset.
+
+### Keybinds
+Register keybinds for hotkey panels, and they'll automatically be added to the panel!
+
+---
+
+## Common Issues
+
+**Components not showing?**
+- Check that `CoreGui` is accessible
+- Verify theme colors have contrast
+
+**Animations jerky?**
+- Use animation presets instead of custom durations
+- Avoid tweening every frame
+
+**Theme not updating?**
+- Use `Zenith:SetTheme()` instead of replacing table
+- Check all components reference `Zenith.Theme`
+---
+
+## License & Credits
+
+**Zenith UI Framework v3.0+**  
+Built with 💜 by Xen  
+All code is free to use and modify!
