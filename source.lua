@@ -1169,13 +1169,6 @@ function Window:CreateTab(name, icon)
         
         return {frame = frame, textBox = textBox, GetText = function() return textBox.Text end}
     end
-        local sep = Instance.new("Frame")
-        sep.Parent = tabContent
-        sep.BackgroundColor3 = Zenith.Theme.SurfaceLight
-        sep.Size = UDim2.new(1, 0, 0, 2)
-        sep.BorderSizePixel = 0
-        return sep
-    end
     
     return api
 end
@@ -2519,7 +2512,7 @@ function Zenith:CreateHotkeys(options)
     hotkeyFrame.BackgroundColor3 = Zenith.Theme.Background
     hotkeyFrame.BorderSizePixel = 0
     hotkeyFrame.Size = UDim2.new(0, 300, 0, #hotkeys * 40 + 50)
-    hotkeyFrame.Position = options.Position or UDim2.new(0, 20, 1, --(#hotkeys * 40 + 70))
+    hotkeyFrame.Position = options.Position or UDim2.new(0, 20, 1, 0)
     hotkeyFrame.AnchorPoint = Vector2.new(0, 1)
     createCorner(hotkeyFrame, 12)
     addGlow(hotkeyFrame, Zenith.Theme.Primary, 1.5)
